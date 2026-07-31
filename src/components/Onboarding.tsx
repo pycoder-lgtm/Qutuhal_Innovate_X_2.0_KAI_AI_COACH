@@ -957,6 +957,9 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                               });
                               if (!res.ok) throw new Error("Failed to analyze image portfolio");
                               const data = await res.json();
+                              if (data.valid_full_body !== undefined) updateField('valid_full_body', data.valid_full_body);
+                              if (data.rejection_reason) updateField('rejection_reason', data.rejection_reason);
+                              if (data.postureAssessment) updateField('postureAssessment', data.postureAssessment);
                               if (data.analysis) updateField('physiqueAnalysis', data.analysis);
                               if (data.frameType) updateField('frameType', data.frameType);
                               if (data.frontAngleReport) updateField('frontAngleReport', data.frontAngleReport);
@@ -1052,6 +1055,56 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                             <p className="text-[9px] text-slate-400 text-center italic">
                               💡 Adjust predicted weight/height above if needed to perfectly calibrate your customized plan.
                             </p>
+
+                            {/* Full-Body Validation Notice */}
+                            {formData.valid_full_body === false && (
+                              <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-rose-300 text-xs space-y-1">
+                                <div className="font-bold flex items-center gap-1.5 text-rose-400">
+                                  <AlertCircle className="w-4 h-4 shrink-0" />
+                                  Full-Body Image Required
+                                </div>
+                                <p className="text-[11px] leading-relaxed text-slate-300">
+                                  {formData.rejection_reason || "The subject is not fully visible from head to toe (ears/head top to feet/soles). Please upload a complete full-body photo for accurate posture analysis."}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Detailed Posture Assessment Box */}
+                            {formData.postureAssessment && formData.valid_full_body !== false && (
+                              <div className="bg-slate-900/80 rounded-xl p-3.5 border border-sky-500/20 space-y-2.5">
+                                <div className="text-[10px] uppercase font-bold tracking-widest text-sky-400 flex items-center gap-1.5">
+                                  <Activity className="w-3.5 h-3.5" />
+                                  Biomechanical Posture Assessment
+                                </div>
+
+                                {formData.postureAssessment.identifiedDeviations && formData.postureAssessment.identifiedDeviations.length > 0 && (
+                                  <div>
+                                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Identified Deviations</span>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {formData.postureAssessment.identifiedDeviations.map((dev: string, idx: number) => (
+                                        <span key={idx} className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-semibold px-2 py-0.5 rounded-md">
+                                          {dev}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {formData.postureAssessment.exerciseModifications && formData.postureAssessment.exerciseModifications.length > 0 && (
+                                  <div>
+                                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Exercise Modifications</span>
+                                    <ul className="space-y-1 text-[11px] text-slate-300">
+                                      {formData.postureAssessment.exerciseModifications.map((mod: string, idx: number) => (
+                                        <li key={idx} className="flex items-start gap-1.5">
+                                          <span className="text-teal-400 shrink-0 mt-0.5">•</span>
+                                          <span>{mod}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            )}
 
                             <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-line bg-slate-900/50 p-3.5 rounded-xl border border-slate-900/40 shadow-inner">
                               <span className="font-bold text-sky-400 block mb-1 uppercase tracking-wider text-[10px]">Executive 360° Summary</span>

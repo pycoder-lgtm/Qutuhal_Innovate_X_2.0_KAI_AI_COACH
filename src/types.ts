@@ -3,6 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export interface PostureAssessment {
+  headNeck: string;
+  shoulders: string;
+  pelvisSpine: string;
+  kneesAnkles: string;
+  identifiedDeviations: string[];
+  exerciseModifications: string[];
+}
+
 export interface UserProfile {
   email?: string;
   name: string;
@@ -29,6 +38,9 @@ export interface UserProfile {
   photoLeft?: string; // Base64 Left Side Photo
   photoRight?: string; // Base64 Right Side Photo
   photoBack?: string; // Base64 Back Photo
+  valid_full_body?: boolean;
+  rejection_reason?: string | null;
+  postureAssessment?: PostureAssessment;
   physiqueAnalysis?: string; // Text summary from AI
   frontAngleReport?: string; // Front view analysis details
   sideAngleReport?: string; // Side views posture & pelvic tilt analysis

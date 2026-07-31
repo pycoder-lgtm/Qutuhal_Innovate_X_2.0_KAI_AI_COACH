@@ -1326,6 +1326,22 @@ function computeProfileSmartDefaults(profile: any) {
   if (goals.includes('fat_loss_lean_figure')) estBodyFat -= 3;
 
   return {
+    valid_full_body: true,
+    rejection_reason: null,
+    postureAssessment: {
+      headNeck: "Neutral head position relative to cervical spine with minor forward tilt.",
+      shoulders: "Symmetrical shoulder girdle height with mild scapular protraction.",
+      pelvisSpine: "Neutral pelvic tilt with balanced lumbar arch and core engagement.",
+      kneesAnkles: "Neutral patellar tracking and stable ankle arches.",
+      identifiedDeviations: [
+        "Mild Forward Head Posture",
+        "Mild Anterior Pelvic Tilt"
+      ],
+      exerciseModifications: [
+        "Replace heavy lumbar-loading lifts with chest-supported rowing & split-stance squat variations.",
+        "Include face pulls and chin tucks to reinforce upper back alignment."
+      ]
+    },
     frameType: "Athletic Mesomorph Baseline",
     frontAngleReport: "Balanced chest and clavicle ratio with symmetrical anterior deltoid engagement.",
     sideAngleReport: "Optimal spinal alignment with minor postural tightness in upper traps and hip flexors.",
@@ -1610,7 +1626,7 @@ app.post("/api/analyze-physique", validateAtLeastOneField(["photoFront", "photoL
     const userName = name || "Aesthetic Warrior";
     const userAge = age || 25;
     
-    let textPrompt = `You are conducting an in-depth professional 360-degree aesthetic structure, posture, and body composition assessment for user ${userName} who is ${userAge} years old. You have been provided with ${imagesToAnalyze.length} photo(s) representing different angles of their body.
+    let textPrompt = `You are conducting an in-depth professional posture and 360-degree aesthetic frame assessment for user ${userName} who is ${userAge} years old. You have been provided with ${imagesToAnalyze.length} photo(s) representing different angles of their body.
 
 The provided photos are:
 `;
@@ -1619,23 +1635,46 @@ The provided photos are:
       textPrompt += `- Photo ${index + 1}: ${item.label}\n`;
     });
     
-    textPrompt += `\nEvaluate these photos with deep biomechanical precision using your advanced visual reasoning. You MUST conduct a comprehensive 360-degree assessment across ALL provided photo angles (Front, Left Profile, Right Profile, and Back views) to enable complete structural calibration.
+    textPrompt += `\nTASK & VALIDATION RULE:
+1. FIRST, perform a full-body check. Verify if the human subject is fully visible from head to toe (ears/head top down to feet/soles).
+2. IF the head, hips, or feet are cropped out in the photo(s):
+   - Set "valid_full_body": false
+   - Set "rejection_reason": Explain clearly what is cropped out (e.g., "The top of the head, hips, or feet are cropped out in the photo. A complete head-to-toe photo is required for posture analysis.").
+   - Stop detailed posture assessment and set fallback posture notes.
+3. IF the full body is visible from head to toe:
+   - Set "valid_full_body": true
+   - Set "rejection_reason": null (or empty string)
+   - Execute full posture assessment according to the guidelines below.
+
+POSTURE ANALYSIS GUIDELINES (When valid_full_body is true):
+- Assess alignment across: Head/Neck, Shoulders, Pelvis/Spine, and Knees/Ankles.
+- Identify common deviations (e.g., Forward Head Posture, Anterior Pelvic Tilt, Shoulder Elevation, Knee Valgus).
+- Map identified deviations directly to exercise modifications (e.g., replace heavy lumbar-loading lifts with supported alternatives).
 
 Provide:
-1. "analysis": A comprehensive, highly detailed executive report of their overall current aesthetic frame, body composition, posture, and muscular proportions.
-2. "frameType": Classification of their frame archetype (e.g., "V-Taper Athletic Mesomorph", "Broad Clavicle Endomorph Recomp", "Narrow Ectomorph Hypertrophy").
-3. "frontAngleReport": Specific detailed observations from the Front photo (shoulder-to-waist ratio, clavicle width, chest balance, abdominal fat distribution).
-4. "sideAngleReport": Specific detailed observations from the Left & Right side photos (cervical spine curvature, forward head tilt, thoracic curve, lumbar lordosis / pelvic tilt, abdominal depth).
-5. "backAngleReport": Specific detailed observations from the Back photo (latissimus dorsi insertion height, trapezius development, scapular symmetry & posterior chain).
-6. "predictedWeight": Estimated weight in kg (integer). Be realistic for high body fat / heavy volume silhouettes (e.g. 95-115kg for large frames).
-7. "predictedHeight": Estimated height in cm (integer).
-8. "estimatedBodyFatPercent": Estimated body fat percentage (integer, e.g. 18).
-9. "bmr": Basal Metabolic Rate in kcal (integer).
-10. "tdee": Total Daily Energy Expenditure in kcal (integer).
-11. "recommendedMacros": Protein (g), Carbs (g), Fat (g).
-12. "biomechanicalAlerts": Array of 2-3 specific movement/posture cautions.
-13. "aestheticPotential": 1-line title for their physical transformation blueprint.
-14. "coachDirectives": Array of 3 actionable training/nutrition habits.`;
+1. "valid_full_body": boolean
+2. "rejection_reason": string or null
+3. "postureAssessment": object with:
+   - "headNeck": alignment analysis & deviations
+   - "shoulders": alignment analysis & deviations
+   - "pelvisSpine": alignment analysis & deviations
+   - "kneesAnkles": alignment analysis & deviations
+   - "identifiedDeviations": array of specific deviation strings
+   - "exerciseModifications": array of direct exercise modification mapping strings
+4. "analysis": Executive 360-degree frame and posture summary report.
+5. "frameType": Skeletal frame archetype (e.g., "V-Taper Athletic Mesomorph").
+6. "frontAngleReport": Detailed front view observations.
+7. "sideAngleReport": Detailed side view observations (posture, spinal curve, pelvic tilt).
+8. "backAngleReport": Detailed back view observations (lats, traps, scapulae).
+9. "predictedWeight": Estimated weight in kg.
+10. "predictedHeight": Estimated height in cm.
+11. "estimatedBodyFatPercent": Estimated body fat percentage.
+12. "bmr": Basal Metabolic Rate in kcal.
+13. "tdee": Total Daily Energy Expenditure in kcal.
+14. "recommendedMacros": Protein (g), Carbs (g), Fat (g).
+15. "biomechanicalAlerts": Array of 2-3 specific movement/posture cautions.
+16. "aestheticPotential": 1-line blueprint title.
+17. "coachDirectives": Array of 3 actionable training/nutrition habits.`;
 
     parts.push({ text: textPrompt });
 
@@ -1666,11 +1705,51 @@ Provide:
           thinkingConfig: {
             thinkingBudget: 2048
           },
-          systemInstruction: "You are Coach Kai, an elite certified sports scientist, biomechanist, posture specialist, and head coach. Your tone is direct, supportive, professional, and 100% honest. You use deep multimodal reasoning to analyze user physique photos across all angles, providing a complete 360-degree aesthetic frame report.",
+          systemInstruction: "You are Coach Kai, an elite certified sports scientist, posture specialist, biomechanist, and head coach. You use deep multimodal reasoning to analyze user posture images. First, verify full-body visibility from head to toe. If head, hips, or feet are cropped out, mark valid_full_body as false and provide a rejection_reason. If full body is visible, execute a complete posture assessment across Head/Neck, Shoulders, Pelvis/Spine, and Knees/Ankles, identifying deviations and mapping them directly to exercise modifications.",
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
+              valid_full_body: {
+                type: Type.BOOLEAN,
+                description: "True if subject is fully visible from head to toe; false if head, hips, or feet are cropped out."
+              },
+              rejection_reason: {
+                type: Type.STRING,
+                description: "Reason if valid_full_body is false (e.g., 'Head, hips, or feet are cropped out in photo'). Null/empty if valid_full_body is true."
+              },
+              postureAssessment: {
+                type: Type.OBJECT,
+                properties: {
+                  headNeck: {
+                    type: Type.STRING,
+                    description: "Alignment assessment for head and neck (e.g. cervical spine curve, forward head posture)."
+                  },
+                  shoulders: {
+                    type: Type.STRING,
+                    description: "Alignment assessment for shoulders (e.g. elevation, protraction, asymmetry)."
+                  },
+                  pelvisSpine: {
+                    type: Type.STRING,
+                    description: "Alignment assessment for pelvis and spine (e.g. anterior pelvic tilt, lumbar lordosis, thoracic curvature)."
+                  },
+                  kneesAnkles: {
+                    type: Type.STRING,
+                    description: "Alignment assessment for knees and ankles (e.g. knee valgus, ankle pronation)."
+                  },
+                  identifiedDeviations: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                    description: "List of identified posture deviations (e.g. Forward Head Posture, Anterior Pelvic Tilt, Shoulder Elevation, Knee Valgus)."
+                  },
+                  exerciseModifications: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                    description: "Direct mapping of identified deviations to exercise modifications (e.g. replace heavy lumbar-loading lifts with supported alternatives)."
+                  }
+                },
+                required: ["headNeck", "shoulders", "pelvisSpine", "kneesAnkles", "identifiedDeviations", "exerciseModifications"]
+              },
               analysis: {
                 type: Type.STRING,
                 description: "Comprehensive 360-degree aesthetic frame report and body composition assessment."
@@ -1735,7 +1814,7 @@ Provide:
                 description: "3 key actionable training/nutrition habits"
               }
             },
-            required: ["analysis", "frameType", "frontAngleReport", "sideAngleReport", "backAngleReport", "predictedWeight", "predictedHeight", "estimatedBodyFatPercent", "bmr", "tdee", "recommendedMacros", "biomechanicalAlerts", "aestheticPotential", "coachDirectives"]
+            required: ["valid_full_body", "rejection_reason", "postureAssessment", "analysis", "frameType", "frontAngleReport", "sideAngleReport", "backAngleReport", "predictedWeight", "predictedHeight", "estimatedBodyFatPercent", "bmr", "tdee", "recommendedMacros", "biomechanicalAlerts", "aestheticPotential", "coachDirectives"]
           }
         }
       }),
@@ -1769,6 +1848,9 @@ Provide:
     });
 
     res.json({
+      valid_full_body: parsed.valid_full_body ?? true,
+      rejection_reason: parsed.rejection_reason || null,
+      postureAssessment: parsed.postureAssessment || defaults.postureAssessment,
       analysis: parsed.analysis || defaults.analysis,
       frameType: parsed.frameType || defaults.frameType,
       frontAngleReport: parsed.frontAngleReport || defaults.frontAngleReport,
