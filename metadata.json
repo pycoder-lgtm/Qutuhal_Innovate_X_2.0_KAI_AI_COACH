@@ -1,0 +1,6 @@
+{
+  "name": "AI Fitness Coach",
+  "description": "Calibrates your structural frame using a 4-angle physique portfolio, predicts postural alignment and current health status, and drafts professional training splits and personalized nutrition with real-time support from Coach Kai.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

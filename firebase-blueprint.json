@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "users": {
+      "path": "users/{userId}",
+      "fields": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "age": { "type": "number" },
+        "gender": { "type": "string" },
+        "height": { "type": "number" },
+        "weight": { "type": "number" },
+        "targetWeight": { "type": "number" },
+        "goals": { "type": "array" },
+        "photoFront": { "type": "string" },
+        "photoLeft": { "type": "string" },
+        "photoRight": { "type": "string" },
+        "photoBack": { "type": "string" },
+        "physiquePhoto": { "type": "string" },
+        "physiqueAnalysis": { "type": "string" },
+        "dietType": { "type": "string" },
+        "experienceLevel": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "plans": {
+      "path": "users/{userId}/plans/{planId}",
+      "fields": {
+        "userId": { "type": "string" },
+        "dayName": { "type": "string" },
+        "workoutName": { "type": "string" },
+        "workoutType": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "chat": {
+      "path": "users/{userId}/chat/{messageId}",
+      "fields": {
+        "userId": { "type": "string" },
+        "role": { "type": "string" },
+        "content": { "type": "string" },
+        "timestamp": { "type": "number" }
+      }
+    },
+    "workoutLogs": {
+      "path": "users/{userId}/workoutLogs/{logId}",
+      "fields": {
+        "userId": { "type": "string" },
+        "exerciseName": { "type": "string" },
+        "sets": { "type": "number" },
+        "reps": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "loggedAt": { "type": "string" }
+      }
+    }
+  }
+}

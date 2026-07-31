@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection test doc
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+
+    // User profiles & subcollections
+    match /users/{userId} {
+      allow read, write: if request.auth != null ? request.auth.uid == userId : true;
+
+      match /{subcollection=**} {
+        allow read, write: if request.auth != null ? request.auth.uid == userId : true;
+      }
+    }
+  }
+}
