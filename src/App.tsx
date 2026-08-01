@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Onboarding from './components/Onboarding';
 import Dashboard from './components/Dashboard';
 import CoachChat from './components/CoachChat';
@@ -14,13 +14,14 @@ import { detectUserLocation } from './utils/location';
 import { 
   Dumbbell, MessageSquare, LineChart, UserCog, Sparkles, 
   Settings, LogOut, CheckCircle, Scale, Utensils, LogIn, User as UserIcon,
-  Database, RefreshCw, Trophy
+  Database, RefreshCw, Trophy, RotateCcw, AlertTriangle, X
 } from 'lucide-react';
 import { 
   auth, signInWithGoogle, logoutUser, 
   saveProfileToFirestore, getProfileFromFirestore, 
   savePlanToFirestore, getPlanFromFirestore, 
-  getChatHistoryFromFirestore, saveChatMessageToFirestore 
+  getChatHistoryFromFirestore, saveChatMessageToFirestore,
+  clearAllUserDataFromFirestore, ensureAuthenticatedUser 
 } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
@@ -92,6 +93,9 @@ export default function App() {
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [loadingChat, setLoadingChat] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const isResettingRef = useRef(false);
 
   // Firebase User Auth & Firestore State Sync
   const [user, setUser] = useState<User | null>(null);
@@ -167,26 +171,12 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      if (currentUser) {
+      if (currentUser && !isResettingRef.current) {
         try {
           const remoteProfile = await getProfileFromFirestore(currentUser.uid);
           if (remoteProfile && (remoteProfile.name || remoteProfile.weight || remoteProfile.photoFront || remoteProfile.physiquePhoto)) {
             setProfile(prev => prev ? { ...prev, ...remoteProfile } : remoteProfile as UserProfile);
             localStorage.setItem('kai_coach_profile', JSON.stringify(remoteProfile));
-          } else {
-            // If remote profile is not found in Firestore yet, check local cache
-            const rawCached = localStorage.getItem('kai_coach_profile');
-            if (rawCached) {
-              try {
-                const parsedCached = JSON.parse(rawCached) as UserProfile;
-                if (parsedCached && (parsedCached.name || parsedCached.weight)) {
-                  await saveProfileToFirestore(currentUser.uid, parsedCached);
-                  setProfile(parsedCached);
-                }
-              } catch (e) {
-                console.error("Local profile parse error:", e);
-              }
-            }
           }
           const remotePlan = await getPlanFromFirestore(currentUser.uid, selectedDay);
           if (remotePlan) {
@@ -206,6 +196,7 @@ export default function App() {
 
   // Sync state mutations back to localStorage & Firestore
   useEffect(() => {
+    if (isResettingRef.current) return;
     if (profile) {
       localStorage.setItem('kai_coach_profile', JSON.stringify(profile));
       if (user) {
@@ -283,6 +274,18 @@ export default function App() {
     setErrorText(null);
     setLoadingPlan(true); // Put loader on the Daily Plan page immediately
     setActiveTab('today'); // Stay on the Daily Plan page
+
+    // Auto-link to Firebase Database silently in background and sync 4 photos & details
+    try {
+      const activeUser = await ensureAuthenticatedUser();
+      if (activeUser) {
+        setUser(activeUser);
+        await saveProfileToFirestore(activeUser.uid, newProfile);
+        console.log("Auto-synced profile & 4 photos to Firebase Database.");
+      }
+    } catch (syncErr) {
+      console.warn("Background Firebase sync notice:", syncErr);
+    }
 
     const focusLabels = Array.isArray(newProfile.focusAesthetic)
       ? newProfile.focusAesthetic.map(f => {
@@ -588,12 +591,90 @@ export default function App() {
     }
   };
 
-  const handleResetProfile = () => {
-    if (confirm("Are you sure you want to reset your profile details? Your past history and logs will still be preserved, but you can fill out new measurements.")) {
+  const handleSignOut = async () => {
+    try {
+      await logoutUser();
+      setUser(null);
       setProfile(null);
       setCurrentPlan(null);
+      setHistoryLogs([]);
       setChatMessages([]);
+      setErrorText(null);
+      setSyncStatusMsg(null);
+      setActiveTab('today');
+    } catch (e) {
+      console.error("Sign out error:", e);
     }
+  };
+
+  const handleHeaderGoogleLogin = async () => {
+    try {
+      const loggedInUser = await signInWithGoogle();
+      if (loggedInUser) {
+        setUser(loggedInUser);
+        const remoteProfile = await getProfileFromFirestore(loggedInUser.uid);
+        if (remoteProfile && (remoteProfile.name || remoteProfile.weight)) {
+          setProfile(remoteProfile);
+          localStorage.setItem('kai_coach_profile', JSON.stringify(remoteProfile));
+        }
+        const remotePlan = await getPlanFromFirestore(loggedInUser.uid, selectedDay);
+        if (remotePlan) {
+          setCurrentPlan(remotePlan);
+        }
+        const remoteChat = await getChatHistoryFromFirestore(loggedInUser.uid);
+        if (remoteChat && remoteChat.length > 0) {
+          setChatMessages(remoteChat);
+        }
+      }
+    } catch (e: any) {
+      console.error("Header Google sign-in error:", e);
+    }
+  };
+
+  const handleOpenResetModal = () => {
+    setShowResetModal(true);
+  };
+
+  const executeResetAllData = async () => {
+    setIsResetting(true);
+    isResettingRef.current = true;
+    const currentUid = user?.uid || auth.currentUser?.uid;
+
+    // 1. Clear Firestore while authenticated
+    if (currentUid) {
+      try {
+        await clearAllUserDataFromFirestore(currentUid);
+      } catch (e) {
+        console.error("Firestore clear error:", e);
+      }
+    }
+
+    // 2. Clear all local storage
+    try {
+      localStorage.clear();
+    } catch (e) {
+      console.error("Local storage clear error:", e);
+    }
+
+    // 3. Reset React states
+    setProfile(null);
+    setCurrentPlan(null);
+    setHistoryLogs([]);
+    setChatMessages([]);
+    setErrorText(null);
+    setSyncStatusMsg(null);
+    setActiveTab('today');
+
+    // 4. Logout if logged in
+    try {
+      await logoutUser();
+    } catch (e) {
+      console.error("Logout error:", e);
+    }
+
+    isResettingRef.current = false;
+    setIsResetting(false);
+    setShowResetModal(false);
   };
 
   return (
@@ -677,13 +758,36 @@ export default function App() {
                   </button>
                 </nav>
 
-                <button
-                  onClick={handleResetProfile}
-                  title="Reset profile measurements"
-                  className="p-2.5 text-slate-500 hover:text-red-400 hover:bg-slate-900 rounded-xl transition"
-                >
-                  <LogOut className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+                  {user ? (
+                    <button
+                      onClick={handleSignOut}
+                      title="Sign Out (Your data remains safely stored in the database)"
+                      className="px-3 py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0"
+                    >
+                      <LogOut className="w-4 h-4 text-sky-400" />
+                      <span className="hidden sm:inline">Sign Out</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleHeaderGoogleLogin}
+                      title="Sign In with Google to auto-restore your saved data"
+                      className="px-3 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md shrink-0"
+                    >
+                      <LogIn className="w-4 h-4" />
+                      <span className="hidden sm:inline">Sign In</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={handleOpenResetModal}
+                    title="Reset & Restart All Data (Permanently erases data)"
+                    className="p-2.5 text-slate-500 hover:text-red-400 hover:bg-slate-900 rounded-xl transition flex items-center gap-1.5"
+                  >
+                    <RotateCcw className="w-5 h-5 text-slate-400 hover:text-red-400" />
+                    <span className="hidden lg:inline text-xs font-semibold text-slate-400 hover:text-red-400">Reset & Restart</span>
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -766,77 +870,6 @@ export default function App() {
 
             {activeTab === 'profile_edit' && (
               <div className="max-w-2xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-xl space-y-8">
-                {/* Firebase Database Cloud Sync & Auth Banner */}
-                <div className="bg-slate-950 border border-sky-500/30 rounded-2xl p-5 space-y-4 shadow-lg">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-900 pb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 bg-sky-500/10 text-sky-400 rounded-xl border border-sky-500/20 shrink-0">
-                        <Database className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-black uppercase tracking-wider text-white font-display">Firebase Cloud Database</span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            user ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                          }`}>
-                            {user ? 'Account Linked' : 'Guest Mode (Local Only)'}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          {user ? `Logged in as ${user.displayName || user.email}` : 'Log in or sign up with Google to sync profile & photos with Firebase.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {user ? (
-                        <>
-                          <button
-                            onClick={handleManualSyncProfileToFirestore}
-                            disabled={syncingCloud}
-                            className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md"
-                          >
-                            <span>{syncingCloud ? 'Syncing...' : 'Sync Profile & Photos'}</span>
-                          </button>
-                          <button
-                            onClick={handleManualFetchProfileFromFirestore}
-                            disabled={syncingCloud}
-                            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-850 text-sky-400 border border-sky-500/30 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
-                          >
-                            <RefreshCw className={`w-3.5 h-3.5 ${syncingCloud ? 'animate-spin' : ''}`} />
-                            <span>Fetch Database</span>
-                          </button>
-                          <button
-                            onClick={() => logoutUser()}
-                            className="px-2.5 py-1.5 text-slate-400 hover:text-red-400 text-xs font-bold transition"
-                          >
-                            Sign Out
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          onClick={handleManualSyncProfileToFirestore}
-                          disabled={syncingCloud}
-                          className="px-4 py-2 bg-gradient-to-r from-sky-500 to-teal-500 hover:from-sky-400 hover:to-teal-400 text-slate-950 font-bold rounded-xl text-xs shadow-md transition flex items-center gap-2"
-                        >
-                          <LogIn className="w-4 h-4" />
-                          <span>Log In / Sign Up with Google</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {syncStatusMsg && (
-                    <div className="bg-sky-500/10 border border-sky-500/20 text-sky-300 rounded-xl p-3 text-xs flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-sky-400 shrink-0" />
-                        <span>{syncStatusMsg}</span>
-                      </div>
-                      <button onClick={() => setSyncStatusMsg(null)} className="text-slate-400 hover:text-white text-xs font-bold px-1">✕</button>
-                    </div>
-                  )}
-                </div>
-
                 <div className="border-b border-slate-800 pb-4">
                   <h2 className="text-xl font-bold text-white uppercase tracking-tight">Current Coach Settings</h2>
                   <p className="text-xs text-slate-500 mt-1">Review your recorded biological and performance parameters</p>
@@ -856,12 +889,20 @@ export default function App() {
                     <span className="text-sm font-semibold text-white uppercase">{profile.gender}</span>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">Height</span>
-                    <span className="text-sm font-semibold text-white">{profile.height} cm</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">
+                      {profile.predictedHeightRange ? "Estimated Height Range" : "Height"}
+                    </span>
+                    <span className="text-sm font-semibold text-white">
+                      {profile.predictedHeightRange || `${profile.height} cm`}
+                    </span>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">Weight</span>
-                    <span className="text-sm font-semibold text-white">{profile.weight} kg</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">
+                      {profile.predictedWeightRange ? "Estimated Weight Range" : "Weight"}
+                    </span>
+                    <span className="text-sm font-semibold text-white">
+                      {profile.predictedWeightRange || `${profile.weight} kg`}
+                    </span>
                   </div>
                   {profile.targetWeight && (
                     <div className="space-y-1">
@@ -1017,20 +1058,58 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="flex gap-4 pt-4 border-t border-slate-800">
+                <div className="pt-4 border-t border-slate-800 space-y-4">
+                  <div className="bg-slate-950 p-4.5 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-sky-500/10 text-sky-400 rounded-xl border border-sky-500/20 shrink-0">
+                        <Database className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-white uppercase tracking-wider font-display">
+                            {user ? (user.displayName || user.email || 'Connected Account') : 'Guest Account'}
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            user ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'
+                          }`}>
+                            {user ? 'Database Active' : 'Not Signed In'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {user 
+                            ? 'All profile details, 4 photos & workout plans are safely preserved in the database when signing out.' 
+                            : 'Sign in to automatically sync and restore your saved data.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0">
+                      {user ? (
+                        <button
+                          onClick={handleSignOut}
+                          className="px-4 py-2 bg-slate-900 hover:bg-slate-850 text-slate-200 hover:text-white border border-slate-800 hover:border-slate-700 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md"
+                        >
+                          <LogOut className="w-4 h-4 text-sky-400" />
+                          <span>Sign Out</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleHeaderGoogleLogin}
+                          className="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md"
+                        >
+                          <LogIn className="w-4 h-4" />
+                          <span>Sign In / Link Google</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
                   <button
-                    onClick={() => {
-                      setProfile(null);
-                    }}
-                    className="flex-1 bg-sky-500 hover:bg-sky-600 text-slate-950 font-bold py-3 px-4 rounded-xl text-sm transition"
+                    onClick={handleOpenResetModal}
+                    className="w-full border border-slate-800 hover:border-red-900/60 hover:bg-red-950/20 text-slate-400 hover:text-red-400 font-bold py-3.5 px-4 rounded-xl text-sm transition flex items-center justify-center gap-2"
                   >
-                    Edit Onboarding Profile
-                  </button>
-                  <button
-                    onClick={handleResetProfile}
-                    className="flex-1 border border-slate-800 hover:border-red-900/60 hover:bg-red-950/20 text-slate-400 hover:text-red-400 font-bold py-3 px-4 rounded-xl text-sm transition"
-                  >
-                    Reset & Restart All Data
+                    <RotateCcw className="w-4 h-4 text-red-400" />
+                    <span>Reset & Restart All Data</span>
                   </button>
                 </div>
               </div>
@@ -1038,6 +1117,64 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Reset Confirmation Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <button
+              onClick={() => !isResetting && setShowResetModal(false)}
+              disabled={isResetting}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 text-red-400 mb-4">
+              <div className="bg-red-500/10 p-3 rounded-xl border border-red-500/20">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Reset & Restart All Data?</h3>
+                <p className="text-xs text-red-400/80 font-medium">This action cannot be undone</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-300 leading-relaxed mb-6">
+              This will permanently delete your saved profile metrics, AI workout plans, daily logs, and chat history with Coach Kai, returning you to the fresh onboarding consultation screen.
+            </p>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowResetModal(false)}
+                disabled={isResetting}
+                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-3 px-4 rounded-xl text-sm transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeResetAllData}
+                disabled={isResetting}
+                className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-4 rounded-xl text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-red-900/30 disabled:opacity-50"
+              >
+                {isResetting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Resetting...</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Yes, Reset All</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Styled Footer */}
       <footer className="bg-slate-900 border-t border-slate-800 py-6 mt-12 shrink-0">

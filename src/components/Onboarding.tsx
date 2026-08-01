@@ -11,7 +11,7 @@ import {
   Sparkles, Dumbbell, ShieldAlert, HeartHandshake, Eye, Camera, X, RefreshCw, AlertCircle,
   Database, LogIn, LogOut, CheckCircle2, ShieldCheck, Cloud
 } from 'lucide-react';
-import { auth, signInWithGoogle, logoutUser, getProfileFromFirestore, saveProfileToFirestore, registerWithEmail, loginWithEmail } from '../firebase';
+import { auth, signInWithGoogle, logoutUser, getProfileFromFirestore, saveProfileToFirestore, registerWithEmail, loginWithEmail, ensureAuthenticatedUser } from '../firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 interface OnboardingProps {
@@ -99,6 +99,34 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (initialProfile) {
+      setFormData(initialProfile);
+    } else {
+      setFormData({
+        name: '',
+        age: 25,
+        gender: 'male',
+        height: 175,
+        weight: 75,
+        targetWeight: 75,
+        activityLevel: 'moderate',
+        goals: ['fat_loss_muscle_gain'],
+        goal: 'fat_loss_muscle_gain',
+        dietPreference: 'none',
+        allergies: '',
+        workoutLocation: 'both',
+        dietType: 'non_veg',
+        typicalFoods: '',
+        experienceLevel: 'intermediate',
+        equipmentAvailable: 'Full Gym',
+        injuriesOrConditions: '',
+        focusAesthetic: ['muscular_buff_frame'],
+      });
+      setCurrentStep(0);
+    }
+  }, [initialProfile]);
+
   // Firebase Database & Auth state for Profile Building
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [cloudSyncMsg, setCloudSyncMsg] = useState<string | null>(null);
@@ -138,7 +166,7 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
         try {
           u = await registerWithEmail(email, password);
         } catch (regErr: any) {
-          console.error("Register attempt failed:", regErr);
+          console.warn("Register attempt notice:", regErr?.code || regErr?.message);
           const msg = regErr?.message || regErr?.code || '';
           
           if (msg.includes('email-already-in-use') || regErr?.code === 'auth/email-already-in-use') {
@@ -198,7 +226,7 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
         try {
           u = await loginWithEmail(email, password);
         } catch (loginErr: any) {
-          console.error("Login attempt failed:", loginErr);
+          console.warn("Login attempt notice:", loginErr?.code || loginErr?.message);
           if (loginErr?.code === 'auth/too-many-requests' || loginErr?.message?.includes('too-many-requests')) {
             setAuthError('Too many failed attempts. Access is temporarily locked for security. Please wait 1-2 minutes and try again.');
           } else {
@@ -242,7 +270,7 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      if (currentUser) {
+      if (currentUser && initialProfile === undefined) {
         setCloudLoading(true);
         try {
           const remote = await getProfileFromFirestore(currentUser.uid);
@@ -259,7 +287,7 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
       }
     });
     return () => unsub();
-  }, []);
+  }, [initialProfile]);
 
   const handleGoogleLogin = async (e?: React.MouseEvent) => {
     if (e) {
@@ -353,14 +381,14 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
       if (currentStep < steps.length - 1) {
         setCurrentStep(prev => prev + 1);
       } else {
-        const activeUser = user || auth.currentUser;
-        if (activeUser) {
-          try {
+        try {
+          const activeUser = await ensureAuthenticatedUser();
+          if (activeUser) {
             await saveProfileToFirestore(activeUser.uid, formData as UserProfile);
             console.log("Auto-saved final profile & photos to Firebase Database.");
-          } catch (err) {
-            console.error("Firestore completion save error:", err);
           }
+        } catch (err) {
+          console.error("Firestore completion save error:", err);
         }
         onComplete(formData as UserProfile);
       }
@@ -440,90 +468,6 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
             title={step.title}
           />
         ))}
-      </div>
-
-      {/* Firebase Cloud Database Auth & Sync Card for Profile Building */}
-      <div className="bg-slate-950 border-b border-slate-800 p-4 px-8 flex flex-col gap-3">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-sky-500/10 text-sky-400 rounded-xl border border-sky-500/20 shrink-0">
-              <Database className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-black uppercase tracking-wider text-white font-display">Firebase Database Cloud Sync</span>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                  user ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                }`}>
-                  {user ? 'Connected Account' : 'Guest / Login Recommended'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {user 
-                  ? `Signed in as ${user.displayName || user.email}`
-                  : 'Log in to auto-restore existing photos & details or backup new profile data to Firebase.'}
-              </p>
-            </div>
-          </div>
-
-          <div className="shrink-0">
-            {user ? (
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={handleManualLoadFromCloud}
-                  disabled={cloudLoading}
-                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-850 text-sky-400 border border-sky-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1.5"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${cloudLoading ? 'animate-spin' : ''}`} />
-                  <span>Fetch Database Profile</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleManualSaveToCloud}
-                  disabled={cloudLoading}
-                  className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 rounded-lg text-xs font-bold transition"
-                >
-                  Save Draft
-                </button>
-                <button
-                  type="button"
-                  onClick={() => logoutUser()}
-                  className="px-2 py-1.5 text-slate-400 hover:text-red-400 text-xs font-bold transition flex items-center gap-1"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Sign Out</span>
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={handleGoogleLogin}
-                disabled={cloudLoading}
-                className="px-4 py-2 bg-gradient-to-r from-sky-500 to-teal-500 hover:from-sky-400 hover:to-teal-400 text-slate-950 font-bold rounded-xl text-xs shadow-md transition flex items-center gap-2"
-              >
-                <LogIn className="w-4 h-4" />
-                <span>{cloudLoading ? 'Authenticating...' : 'Log In / Sign Up with Google'}</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {cloudSyncMsg && (
-          <div className="bg-sky-500/10 border border-sky-500/20 text-sky-300 rounded-xl p-2.5 text-xs flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-sky-400 shrink-0" />
-              <span>{cloudSyncMsg}</span>
-            </div>
-            <button 
-              type="button" 
-              onClick={() => setCloudSyncMsg(null)}
-              className="text-slate-400 hover:text-white text-xs font-bold px-1"
-            >
-              ✕
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Step Contents */}
@@ -965,6 +909,8 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                               if (data.frontAngleReport) updateField('frontAngleReport', data.frontAngleReport);
                               if (data.sideAngleReport) updateField('sideAngleReport', data.sideAngleReport);
                               if (data.backAngleReport) updateField('backAngleReport', data.backAngleReport);
+                              if (data.predictedWeightRange) updateField('predictedWeightRange', data.predictedWeightRange);
+                              if (data.predictedHeightRange) updateField('predictedHeightRange', data.predictedHeightRange);
                               if (data.predictedWeight) {
                                 updateField('weight', data.predictedWeight);
                               }
@@ -1024,36 +970,22 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                               </div>
                             )}
 
-                            <div className="grid grid-cols-2 gap-3 bg-slate-900/30 p-2.5 rounded-xl border border-slate-850/50">
+                            <div className="grid grid-cols-2 gap-3 bg-slate-900/40 p-3 rounded-xl border border-sky-500/20">
                               <div className="text-center">
-                                <label className="text-[10px] uppercase font-extrabold text-slate-400 block mb-1">Verify Weight (kg)</label>
-                                <input
-                                  type="number"
-                                  min="10"
-                                  max="300"
-                                  value={formData.weight || ''}
-                                  onChange={(e) => {
-                                    const val = parseFloat(e.target.value) || 0;
-                                    updateField('weight', val);
-                                    updateField('targetWeight', val); // Sync target weight initially
-                                  }}
-                                  className="w-full bg-slate-950 text-sky-400 font-black text-center text-sm py-1.5 rounded-lg border border-slate-800 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/20 transition"
-                                />
+                                <span className="text-[10px] uppercase font-extrabold text-sky-400 block mb-1">Estimated Weight Range</span>
+                                <span className="text-sm font-black text-white font-mono block py-1.5 bg-slate-950 rounded-lg border border-slate-800">
+                                  {formData.predictedWeightRange || (formData.weight ? `${Math.max(40, formData.weight - 3)} - ${formData.weight + 3} kg` : "70 - 76 kg")}
+                                </span>
                               </div>
                               <div className="text-center">
-                                <label className="text-[10px] uppercase font-extrabold text-slate-400 block mb-1">Verify Height (cm)</label>
-                                <input
-                                  type="number"
-                                  min="50"
-                                  max="250"
-                                  value={formData.height || ''}
-                                  onChange={(e) => updateField('height', parseInt(e.target.value) || 0)}
-                                  className="w-full bg-slate-950 text-sky-400 font-black text-center text-sm py-1.5 rounded-lg border border-slate-800 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/20 transition"
-                                />
+                                <span className="text-[10px] uppercase font-extrabold text-sky-400 block mb-1">Estimated Height Range</span>
+                                <span className="text-sm font-black text-white font-mono block py-1.5 bg-slate-950 rounded-lg border border-slate-800">
+                                  {formData.predictedHeightRange || (formData.height ? `${Math.max(140, formData.height - 3)} - ${formData.height + 3} cm` : "172 - 178 cm")}
+                                </span>
                               </div>
                             </div>
                             <p className="text-[9px] text-slate-400 text-center italic">
-                              💡 Adjust predicted weight/height above if needed to perfectly calibrate your customized plan.
+                              💡 Multimodal 360° AI vision maps posture alignment and frame density to estimate your baseline metrics.
                             </p>
 
                             {/* Full-Body Validation Notice */}

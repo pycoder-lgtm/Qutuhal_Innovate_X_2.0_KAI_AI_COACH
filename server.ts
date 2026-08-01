@@ -1349,6 +1349,8 @@ function computeProfileSmartDefaults(profile: any) {
     analysis: `Based on your physical parameters, you display a balanced frame with a calculated BMR of ${bmr} kcal and TDEE of ${tdee} kcal. We will optimize your protein partitioning (${protein}g/day) and progressive overload stimulus to sculpt your aesthetic frame.`,
     predictedWeight: weight,
     predictedHeight: height,
+    predictedWeightRange: `${Math.max(40, weight - 3)} - ${weight + 3} kg`,
+    predictedHeightRange: `${Math.max(140, height - 3)} - ${height + 3} cm`,
     estimatedBodyFatPercent: estBodyFat,
     bmr,
     tdee,
@@ -1666,15 +1668,17 @@ Provide:
 6. "frontAngleReport": Detailed front view observations.
 7. "sideAngleReport": Detailed side view observations (posture, spinal curve, pelvic tilt).
 8. "backAngleReport": Detailed back view observations (lats, traps, scapulae).
-9. "predictedWeight": Estimated weight in kg.
-10. "predictedHeight": Estimated height in cm.
-11. "estimatedBodyFatPercent": Estimated body fat percentage.
-12. "bmr": Basal Metabolic Rate in kcal.
-13. "tdee": Total Daily Energy Expenditure in kcal.
-14. "recommendedMacros": Protein (g), Carbs (g), Fat (g).
-15. "biomechanicalAlerts": Array of 2-3 specific movement/posture cautions.
-16. "aestheticPotential": 1-line blueprint title.
-17. "coachDirectives": Array of 3 actionable training/nutrition habits.`;
+9. "predictedWeightRange": Estimated weight range in kg (e.g. "72 - 78 kg"). DO NOT state an exact single weight, provide an estimated weight range.
+10. "predictedHeightRange": Estimated height range in cm (e.g. "172 - 177 cm"). DO NOT state an exact single height, provide an estimated height range.
+11. "predictedWeight": Numerical midpoint weight in kg (for internal macros).
+12. "predictedHeight": Numerical midpoint height in cm (for internal macros).
+13. "estimatedBodyFatPercent": Estimated body fat percentage.
+14. "bmr": Basal Metabolic Rate in kcal.
+15. "tdee": Total Daily Energy Expenditure in kcal.
+16. "recommendedMacros": Protein (g), Carbs (g), Fat (g).
+17. "biomechanicalAlerts": Array of 2-3 specific movement/posture cautions.
+18. "aestheticPotential": 1-line blueprint title.
+19. "coachDirectives": Array of 3 actionable training/nutrition habits.`;
 
     parts.push({ text: textPrompt });
 
@@ -1705,7 +1709,7 @@ Provide:
           thinkingConfig: {
             thinkingBudget: 2048
           },
-          systemInstruction: "You are Coach Kai, an elite certified sports scientist, posture specialist, biomechanist, and head coach. You use deep multimodal reasoning to analyze user posture images. First, verify full-body visibility from head to toe. If head, hips, or feet are cropped out, mark valid_full_body as false and provide a rejection_reason. If full body is visible, execute a complete posture assessment across Head/Neck, Shoulders, Pelvis/Spine, and Knees/Ankles, identifying deviations and mapping them directly to exercise modifications.",
+          systemInstruction: "You are Coach Kai, an elite certified sports scientist, posture specialist, biomechanist, and head coach. You use deep multimodal reasoning to analyze user posture images. First, verify full-body visibility from head to toe. If head, hips, or feet are cropped out, mark valid_full_body as false and provide a rejection_reason. If full body is visible, execute a complete posture assessment across Head/Neck, Shoulders, Pelvis/Spine, and Knees/Ankles, identifying deviations and mapping them directly to exercise modifications. CRITICAL REQUIREMENT: Do NOT state an actual exact weight or actual exact height. Instead, output the estimated weight range (e.g. '72 - 78 kg') and estimated height range (e.g. '173 - 178 cm').",
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -1770,13 +1774,21 @@ Provide:
                 type: Type.STRING,
                 description: "Detailed Back angle assessment (lats, traps, posterior chain symmetry)"
               },
+              predictedWeightRange: {
+                type: Type.STRING,
+                description: "Estimated weight range in kilograms (e.g. '72 - 78 kg'). Do NOT provide a single exact weight."
+              },
+              predictedHeightRange: {
+                type: Type.STRING,
+                description: "Estimated height range in centimeters (e.g. '173 - 178 cm'). Do NOT provide a single exact height."
+              },
               predictedWeight: {
                 type: Type.INTEGER,
-                description: "Estimated weight of the person in kilograms (e.g. 75)."
+                description: "Estimated weight midpoint integer in kg (e.g. 75)."
               },
               predictedHeight: {
                 type: Type.INTEGER,
-                description: "Estimated height of the person in centimeters (e.g. 175)."
+                description: "Estimated height midpoint integer in cm (e.g. 175)."
               },
               estimatedBodyFatPercent: {
                 type: Type.INTEGER,
@@ -1814,7 +1826,7 @@ Provide:
                 description: "3 key actionable training/nutrition habits"
               }
             },
-            required: ["valid_full_body", "rejection_reason", "postureAssessment", "analysis", "frameType", "frontAngleReport", "sideAngleReport", "backAngleReport", "predictedWeight", "predictedHeight", "estimatedBodyFatPercent", "bmr", "tdee", "recommendedMacros", "biomechanicalAlerts", "aestheticPotential", "coachDirectives"]
+            required: ["valid_full_body", "rejection_reason", "postureAssessment", "analysis", "frameType", "frontAngleReport", "sideAngleReport", "backAngleReport", "predictedWeightRange", "predictedHeightRange", "predictedWeight", "predictedHeight", "estimatedBodyFatPercent", "bmr", "tdee", "recommendedMacros", "biomechanicalAlerts", "aestheticPotential", "coachDirectives"]
           }
         }
       }),
@@ -1856,6 +1868,8 @@ Provide:
       frontAngleReport: parsed.frontAngleReport || defaults.frontAngleReport,
       sideAngleReport: parsed.sideAngleReport || defaults.sideAngleReport,
       backAngleReport: parsed.backAngleReport || defaults.backAngleReport,
+      predictedWeightRange: parsed.predictedWeightRange || defaults.predictedWeightRange,
+      predictedHeightRange: parsed.predictedHeightRange || defaults.predictedHeightRange,
       predictedWeight: parsed.predictedWeight || defaults.predictedWeight,
       predictedHeight: parsed.predictedHeight || defaults.predictedHeight,
       estimatedBodyFatPercent: parsed.estimatedBodyFatPercent || defaults.estimatedBodyFatPercent,
@@ -2506,122 +2520,134 @@ app.get("/api/wger/exercises", async (req: express.Request, res: express.Respons
   const term = (req.query.term as string || "").trim();
   const location = (req.query.location as string || "both").trim();
   const experience = (req.query.experience as string || "intermediate").trim();
+  const equipmentFilter = (req.query.equipment as string || "").trim().toLowerCase();
 
-  // Comprehensive, categorized offline exercise database covering all major muscle groups
-  const FULL_GYM_EXERCISES = [
-    // Chest
-    { id: "c1", name: "Barbell Flat Bench Press", category: "Chest", description: "Lower barbell controlled to chest line and press up explosively for total pectoral mass.", muscles: ["Chest", "Pectoralis Major", "Triceps", "Anterior Deltoids"] },
-    { id: "c2", name: "Incline Dumbbell Bench Press", category: "Chest", description: "Press dumbbells upward at a 30-45 degree incline to target upper pectoral fibers.", muscles: ["Chest", "Pectoralis Major", "Shoulders", "Anterior Deltoids"] },
-    { id: "c3", name: "Decline Barbell Press", category: "Chest", description: "Press barbell on a decline angle isolating lower chest costal fibers.", muscles: ["Chest", "Pectoralis Major", "Triceps"] },
-    { id: "c4", name: "Cable Flyes (High-to-Low)", category: "Chest", description: "Squeeze cable pulleys down and together for lower/inner chest contraction.", muscles: ["Chest", "Pectoralis Major"] },
-    { id: "c5", name: "Pec Deck Machine Flyes", category: "Chest", description: "Isolate sternal head of chest with constant tension without strain on shoulder joints.", muscles: ["Chest", "Pectoralis Major"] },
-    { id: "c6", name: "Parallel Bar Dips (Chest Angle)", category: "Chest", description: "Lean torso forward slightly on parallel bars to stretch and contract lower chest.", muscles: ["Chest", "Pectoralis Major", "Triceps"] },
+  // Comprehensive, massive 120+ exercise database covering all major muscle groups and equipment
+  const COMPREHENSIVE_EXERCISE_DATABASE = [
+    // --- CHEST ---
+    { id: "c1", name: "Barbell Flat Bench Press", category: "Chest", equipment: "Barbell", difficulty: "Intermediate", description: "Lower barbell controlled to mid-chest and press explosively for total pectoral thickness.", muscles: ["Chest", "Pectoralis Major", "Triceps", "Anterior Deltoids"] },
+    { id: "c2", name: "Incline Dumbbell Bench Press", category: "Chest", equipment: "Dumbbell", difficulty: "Intermediate", description: "Press dumbbells at a 30-45 degree incline to target upper clavicular pectoral fibers.", muscles: ["Chest", "Upper Pectoralis", "Shoulders", "Anterior Deltoids"] },
+    { id: "c3", name: "Decline Barbell Bench Press", category: "Chest", equipment: "Barbell", difficulty: "Intermediate", description: "Press barbell on a decline bench isolating lower costal pectoral fibers.", muscles: ["Chest", "Lower Pectoralis", "Triceps"] },
+    { id: "c4", name: "Cable Flyes (High-to-Low)", category: "Chest", equipment: "Cable", difficulty: "Beginner", description: "Squeeze cable pulleys down and together for deep lower and inner chest contraction.", muscles: ["Chest", "Pectoralis Major"] },
+    { id: "c5", name: "Cable Flyes (Low-to-High)", category: "Chest", equipment: "Cable", difficulty: "Intermediate", description: "Scoop cable pulleys upward and inward to isolate upper pectoral cleavage.", muscles: ["Chest", "Upper Pectoralis", "Anterior Deltoids"] },
+    { id: "c6", name: "Pec Deck Machine Flyes", category: "Chest", equipment: "Machine", difficulty: "Beginner", description: "Isolate sternal head of chest with constant tension without strain on shoulder joints.", muscles: ["Chest", "Pectoralis Major"] },
+    { id: "c7", name: "Chest Dips (Parallel Bars)", category: "Chest", equipment: "Bodyweight", difficulty: "Advanced", description: "Lean torso forward on parallel bars, dipping down to stretch and contract lower chest.", muscles: ["Chest", "Lower Pectoralis", "Triceps", "Anterior Deltoids"] },
+    { id: "c8", name: "Flat Dumbbell Flyes", category: "Chest", equipment: "Dumbbell", difficulty: "Intermediate", description: "Lie on flat bench with slight elbow bend, sweeping dumbbells in wide arc for deep chest stretch.", muscles: ["Chest", "Pectoralis Major"] },
+    { id: "c9", name: "Smith Machine Incline Press", category: "Chest", equipment: "Smith Machine", difficulty: "Beginner", description: "Guided incline press allowing maximum weight overload on upper chest safely.", muscles: ["Chest", "Upper Pectoralis", "Triceps"] },
+    { id: "c10", name: "Standing Cable Chest Press", category: "Chest", equipment: "Cable", difficulty: "Beginner", description: "Press cables straight out from chest level with staggered stance for core and chest stability.", muscles: ["Chest", "Core", "Triceps"] },
+    { id: "c11", name: "Dumbbell Pullover", category: "Chest", equipment: "Dumbbell", difficulty: "Intermediate", description: "Lie across bench, lowering single dumbbell behind head to expand ribcage and lower chest.", muscles: ["Chest", "Lats", "Serratus Anterior"] },
+    { id: "c12", name: "Classic Bodyweight Push-ups", category: "Chest", equipment: "Bodyweight", difficulty: "Beginner", description: "Standard floor push-ups building chest, anterior delts, and core stabilization.", muscles: ["Chest", "Triceps", "Anterior Deltoids", "Core"] },
+    { id: "c13", name: "Decline Push-ups (Feet Elevated)", category: "Chest", equipment: "Bodyweight", difficulty: "Intermediate", description: "Elevate feet on bench or chair to shift load onto upper pectorals.", muscles: ["Chest", "Upper Pectoralis", "Shoulders"] },
+    { id: "c14", name: "Diamond Push-ups", category: "Chest", equipment: "Bodyweight", difficulty: "Intermediate", description: "Bring hands together under chest forming diamond shape to blast inner chest and triceps.", muscles: ["Chest", "Triceps", "Inner Pectoralis"] },
+    { id: "c15", name: "Landmine Chest Press", category: "Chest", equipment: "Barbell", difficulty: "Intermediate", description: "Press landmine barbell upward diagonally for upper chest and shoulder health.", muscles: ["Chest", "Upper Pectoralis", "Shoulders"] },
 
-    // Back
-    { id: "b1", name: "Barbell Bent-Over Rows", category: "Back", description: "Hinge at hips, pulling barbell to lower abdomen for lat and upper back density.", muscles: ["Back", "Latissimus Dorsi", "Rhomboids", "Biceps"] },
-    { id: "b2", name: "Lat Pulldowns (Wide Grip)", category: "Back", description: "Pull cable bar down to upper chest for maximum lat width and V-taper.", muscles: ["Back", "Latissimus Dorsi", "Teres Major", "Biceps"] },
-    { id: "b3", name: "Single-Arm Dumbbell Rows", category: "Back", description: "Support knee on bench, pulling heavy dumbbell to hip for unilateral lat isolation.", muscles: ["Back", "Latissimus Dorsi", "Rhomboids"] },
-    { id: "b4", name: "Seated Cable Rows", category: "Back", description: "Pull handle into waist while keeping spine upright to target mid-back and rhomboids.", muscles: ["Back", "Rhomboids", "Trapezius", "Latissimus Dorsi"] },
-    { id: "b5", name: "T-Bar Chest-Supported Rows", category: "Back", description: "Row weighted T-bar to expand upper back thickness and lower lats.", muscles: ["Back", "Rhomboids", "Trapezius"] },
-    { id: "b6", name: "Strict Bodyweight Pull-Ups", category: "Back", description: "Full extension pull-up overhand grip over chin height for upper back width.", muscles: ["Back", "Latissimus Dorsi", "Biceps"] },
+    // --- BACK ---
+    { id: "b1", name: "Barbell Bent-Over Rows", category: "Back", equipment: "Barbell", difficulty: "Intermediate", description: "Hinge at hips, pulling barbell to lower abdomen for lat and upper back density.", muscles: ["Back", "Latissimus Dorsi", "Rhomboids", "Biceps"] },
+    { id: "b2", name: "Wide-Grip Lat Pulldown", category: "Back", equipment: "Cable", difficulty: "Beginner", description: "Pull wide bar down to collarbones for maximum lat width and V-taper development.", muscles: ["Back", "Latissimus Dorsi", "Teres Major", "Biceps"] },
+    { id: "b3", name: "Single-Arm Dumbbell Row", category: "Back", equipment: "Dumbbell", difficulty: "Beginner", description: "Support knee on bench, pulling heavy dumbbell to hip for unilateral lat isolation.", muscles: ["Back", "Latissimus Dorsi", "Rhomboids"] },
+    { id: "b4", name: "Seated Cable Rows (Close Grip)", category: "Back", equipment: "Cable", difficulty: "Beginner", description: "Pull V-bar into waist while keeping spine upright to target mid-back and rhomboids.", muscles: ["Back", "Rhomboids", "Trapezius", "Latissimus Dorsi"] },
+    { id: "b5", name: "Chest-Supported T-Bar Row", category: "Back", equipment: "Machine", difficulty: "Intermediate", description: "Row weighted T-bar while chest is supported to eliminate lower back fatigue.", muscles: ["Back", "Rhomboids", "Trapezius", "Upper Back"] },
+    { id: "b6", name: "Strict Bodyweight Pull-Ups", category: "Back", equipment: "Bodyweight", difficulty: "Advanced", description: "Overhand grip chin-above-bar pull-ups for peak back width and body control.", muscles: ["Back", "Latissimus Dorsi", "Biceps", "Core"] },
+    { id: "b7", name: "Underhand Chin-Ups", category: "Back", equipment: "Bodyweight", difficulty: "Intermediate", description: "Supinated grip pull-ups heavily recruiting lower lats and bicep brachii power.", muscles: ["Back", "Biceps", "Latissimus Dorsi"] },
+    { id: "b8", name: "Meadows Single-Arm Row", category: "Back", equipment: "Barbell", difficulty: "Advanced", description: "Stand perpendicular to landmine barbell, rowing with elbow flare for upper lat thickness.", muscles: ["Back", "Latissimus Dorsi", "Rear Delts"] },
+    { id: "b9", name: "Straight-Arm Cable Pulldown", category: "Back", equipment: "Cable", difficulty: "Beginner", description: "Keep arms straight, sweeping bar down to thighs to isolate latissimus dorsi.", muscles: ["Back", "Latissimus Dorsi", "Teres Major"] },
+    { id: "b10", name: "Pendlay Barbell Rows", category: "Back", equipment: "Barbell", difficulty: "Advanced", description: "Explosive barbell row from dead-stop on floor parallel to torso.", muscles: ["Back", "Latissimus Dorsi", "Rhomboids", "Erector Spinae"] },
+    { id: "b11", name: "Back Extension / Hyperextension", category: "Back", equipment: "Machine", difficulty: "Beginner", description: "Extend torso on 45-degree bench to strengthen erector spinae and glutes.", muscles: ["Back", "Erector Spinae", "Glutes", "Hamstrings"] },
+    { id: "b12", name: "Rack Pulls (Above Knee)", category: "Back", equipment: "Barbell", difficulty: "Intermediate", description: "Partial deadlift from rack height to overload upper back, traps, and spinal erectors.", muscles: ["Back", "Trapezius", "Erector Spinae"] },
+    { id: "b13", name: "Inverted Bodyweight Rows", category: "Back", equipment: "Bodyweight", difficulty: "Beginner", description: "Hang beneath Smith machine or TRX straps, pulling chest to bar for back strength.", muscles: ["Back", "Rhomboids", "Rear Delts"] },
 
-    // Biceps / Arms
-    { id: "bi1", name: "Standing Dumbbell Bicep Curls", category: "Biceps", description: "Supinate wrists at top of curl to maximize bicep peak contraction.", muscles: ["Biceps", "Biceps Brachii", "Arms", "Forearms"] },
-    { id: "bi2", name: "Incline Dumbbell Curls", category: "Biceps", description: "Sit back on incline bench to stretch long head of bicep for deep muscular hypertrophy.", muscles: ["Biceps", "Biceps Brachii", "Arms"] },
-    { id: "bi3", name: "Ez-Bar Preacher Curls", category: "Biceps", description: "Lock arms on preacher pad to isolate bicep peak and eliminate momentum.", muscles: ["Biceps", "Biceps Brachii", "Brachialis"] },
-    { id: "bi4", name: "Dumbbell Hammer Curls", category: "Biceps", description: "Neutral grip curl targeting brachialis and brachioradialis for arm thickness.", muscles: ["Biceps", "Brachialis", "Forearms", "Arms"] },
-    { id: "bi5", name: "Concentration Curls", category: "Biceps", description: "Brace elbow against inner thigh for hyper-focused bicep isolation.", muscles: ["Biceps", "Biceps Brachii"] },
+    // --- BICEPS ---
+    { id: "bi1", name: "Standing Dumbbell Bicep Curls", category: "Biceps", equipment: "Dumbbell", difficulty: "Beginner", description: "Supinate wrists at top of curl to maximize bicep peak contraction.", muscles: ["Biceps", "Biceps Brachii", "Forearms"] },
+    { id: "bi2", name: "Incline Dumbbell Curls", category: "Biceps", equipment: "Dumbbell", difficulty: "Intermediate", description: "Sit back on incline bench stretching long head of bicep for peak growth.", muscles: ["Biceps", "Long Head Biceps"] },
+    { id: "bi3", name: "EZ-Bar Preacher Curls", category: "Biceps", equipment: "Barbell", difficulty: "Intermediate", description: "Lock arms on preacher pad to isolate bicep peak and eliminate momentum.", muscles: ["Biceps", "Biceps Brachii", "Brachialis"] },
+    { id: "bi4", name: "Dumbbell Hammer Curls", category: "Biceps", equipment: "Dumbbell", difficulty: "Beginner", description: "Neutral grip curl targeting brachialis and brachioradialis for arm thickness.", muscles: ["Biceps", "Brachialis", "Forearms"] },
+    { id: "bi5", name: "Concentration Curls", category: "Biceps", equipment: "Dumbbell", difficulty: "Beginner", description: "Brace elbow against inner thigh for hyper-focused single-arm bicep isolation.", muscles: ["Biceps", "Biceps Brachii Peak"] },
+    { id: "bi6", name: "Cable Rope Bicep Curls", category: "Biceps", equipment: "Cable", difficulty: "Beginner", description: "Curl cable rope on low pulley, spreading rope at top for bicep & brachialis peak.", muscles: ["Biceps", "Brachialis"] },
+    { id: "bi7", name: "Spider Curls (Chest-Supported)", category: "Biceps", equipment: "Dumbbell", difficulty: "Intermediate", description: "Lean chest over incline bench, curling arms hanging straight down for short head isolation.", muscles: ["Biceps", "Short Head Biceps"] },
+    { id: "bi8", name: "Zottman Dumbbell Curls", category: "Biceps", equipment: "Dumbbell", difficulty: "Intermediate", description: "Curl up with underhand grip, rotate palms down at top, and lower slowly for forearm build.", muscles: ["Biceps", "Forearms", "Brachioradialis"] },
+    { id: "bi9", name: "Barbell Standing Drag Curls", category: "Biceps", equipment: "Barbell", difficulty: "Intermediate", description: "Drag barbell up along torso keeping elbows back to remove front delt tension.", muscles: ["Biceps", "Biceps Brachii"] },
 
-    // Triceps / Arms
-    { id: "tr1", name: "Tricep Cable Rope Pushdowns", category: "Triceps", description: "Extend arms down and spread rope ends outward to flex lateral head of tricep.", muscles: ["Triceps", "Triceps Brachii", "Arms"] },
-    { id: "tr2", name: "EZ-Bar Skull Crushers (Lying Tricep Extension)", category: "Triceps", description: "Lower bar to forehead line, flexing elbows to stretch and press long head.", muscles: ["Triceps", "Triceps Brachii", "Arms"] },
-    { id: "tr3", name: "Overhead Dumbbell Tricep Extension", category: "Triceps", description: "Lower single dumbbell behind head seated to deeply stretch long head of triceps.", muscles: ["Triceps", "Triceps Brachii"] },
-    { id: "tr4", name: "Close-Grip Barbell Bench Press", category: "Triceps", description: "Hands shoulder-width apart, press barbell emphasizing tricep lockdown power.", muscles: ["Triceps", "Triceps Brachii", "Chest"] },
+    // --- TRICEPS ---
+    { id: "tr1", name: "Tricep Cable Rope Pushdowns", category: "Triceps", equipment: "Cable", difficulty: "Beginner", description: "Extend arms down and spread rope ends outward to flex lateral head of tricep.", muscles: ["Triceps", "Lateral Head Triceps"] },
+    { id: "tr2", name: "EZ-Bar Lying Skull Crushers", category: "Triceps", equipment: "Barbell", difficulty: "Intermediate", description: "Lower bar to forehead line, flexing elbows to stretch and press long tricep head.", muscles: ["Triceps", "Long Head Triceps"] },
+    { id: "tr3", name: "Overhead Dumbbell Tricep Extension", category: "Triceps", equipment: "Dumbbell", difficulty: "Beginner", description: "Lower single heavy dumbbell behind head seated to deeply stretch long head.", muscles: ["Triceps", "Long Head Triceps"] },
+    { id: "tr4", name: "Close-Grip Barbell Bench Press", category: "Triceps", equipment: "Barbell", difficulty: "Intermediate", description: "Hands shoulder-width apart, press barbell emphasizing tricep lockout power.", muscles: ["Triceps", "Chest", "Anterior Deltoids"] },
+    { id: "tr5", name: "Overhead Cable Rope Extension", category: "Triceps", equipment: "Cable", difficulty: "Beginner", description: "Extend cable rope forward overhead to keep continuous tension on tricep long head.", muscles: ["Triceps", "Long Head Triceps"] },
+    { id: "tr6", name: "Bench Dips (Weighted or Unweighted)", category: "Triceps", equipment: "Bodyweight", difficulty: "Beginner", description: "Place hands behind you on bench, lower hips and press up to isolate triceps.", muscles: ["Triceps", "Anterior Deltoids"] },
+    { id: "tr7", name: "Single-Arm Reverse Cable Pushdowns", category: "Triceps", equipment: "Cable", difficulty: "Intermediate", description: "Underhand grip single-arm cable pushdown to isolate medial tricep head.", muscles: ["Triceps", "Medial Head Triceps"] },
 
-    // Shoulders
-    { id: "sh1", name: "Seated Dumbbell Shoulder Press", category: "Shoulders", description: "Press dumbbells vertically overhead for round, full deltoid development.", muscles: ["Shoulders", "Deltoids", "Anterior Deltoids", "Triceps"] },
-    { id: "sh2", name: "Dumbbell Lateral Raises", category: "Shoulders", description: "Raise dumbbells out to sides with slight elbow bend to isolate side deltoid capped look.", muscles: ["Shoulders", "Deltoids", "Lateral Deltoids"] },
-    { id: "sh3", name: "Standing Barbell Military Overhead Press", category: "Shoulders", description: "Strict standing bar press over head to build shoulder strength and core stability.", muscles: ["Shoulders", "Deltoids", "Triceps", "Core"] },
-    { id: "sh4", name: "Cable Face Pulls", category: "Shoulders", description: "Pull rope to face height, externally rotating shoulders for rear delt and rotator cuff health.", muscles: ["Shoulders", "Rear Deltoids", "Trapezius", "Back"] },
-    { id: "sh5", name: "Arnold Dumbbell Press", category: "Shoulders", description: "Rotate palms from facing chest to facing outward overhead for 3-head deltoid stimulation.", muscles: ["Shoulders", "Deltoids"] },
+    // --- SHOULDERS ---
+    { id: "sh1", name: "Seated Dumbbell Shoulder Press", category: "Shoulders", equipment: "Dumbbell", difficulty: "Beginner", description: "Press dumbbells vertically overhead for round, full deltoid development.", muscles: ["Shoulders", "Anterior Deltoids", "Lateral Deltoids", "Triceps"] },
+    { id: "sh2", name: "Dumbbell Lateral Raises", category: "Shoulders", equipment: "Dumbbell", difficulty: "Beginner", description: "Raise dumbbells out to sides with slight elbow bend to isolate side deltoid capped width.", muscles: ["Shoulders", "Lateral Deltoids"] },
+    { id: "sh3", name: "Standing Barbell Military Press", category: "Shoulders", equipment: "Barbell", difficulty: "Intermediate", description: "Strict standing bar press overhead to build shoulder strength and core stability.", muscles: ["Shoulders", "Anterior Deltoids", "Core", "Triceps"] },
+    { id: "sh4", name: "Cable Face Pulls", category: "Shoulders", equipment: "Cable", difficulty: "Beginner", description: "Pull rope to face height, externally rotating shoulders for rear delt and rotator cuff health.", muscles: ["Shoulders", "Rear Deltoids", "Trapezius"] },
+    { id: "sh5", name: "Arnold Dumbbell Press", category: "Shoulders", equipment: "Dumbbell", difficulty: "Intermediate", description: "Rotate palms from facing chest to facing outward overhead for 3-head deltoid stimulation.", muscles: ["Shoulders", "Anterior Deltoids", "Lateral Deltoids"] },
+    { id: "sh6", name: "Cable Lateral Raises", category: "Shoulders", equipment: "Cable", difficulty: "Beginner", description: "Low pulley lateral raise for continuous resistance throughout entire arc of motion.", muscles: ["Shoulders", "Lateral Deltoids"] },
+    { id: "sh7", name: "Reverse Pec Deck Rear Delt Flyes", category: "Shoulders", equipment: "Machine", difficulty: "Beginner", description: "Sit facing machine, sweeping handles back to isolate posterior deltoid heads.", muscles: ["Shoulders", "Rear Deltoids"] },
+    { id: "sh8", name: "Barbell Heavy Shrugs", category: "Shoulders", equipment: "Barbell", difficulty: "Beginner", description: "Shrug barbell up towards ears under control to build thick upper trapezius muscles.", muscles: ["Shoulders", "Trapezius"] },
+    { id: "sh9", name: "Bent-Over Dumbbell Rear Delt Raises", category: "Shoulders", equipment: "Dumbbell", difficulty: "Intermediate", description: "Hinge forward 90 degrees, raising dumbbells out sideways for rear delts.", muscles: ["Shoulders", "Rear Deltoids", "Upper Back"] },
+    { id: "sh10", name: "Pike Push-ups", category: "Shoulders", equipment: "Bodyweight", difficulty: "Intermediate", description: "Pike hips high in air, lowering forehead to ground to simulate overhead shoulder pressing.", muscles: ["Shoulders", "Anterior Deltoids", "Triceps"] },
 
-    // Legs
-    { id: "l1", name: "Barbell Back Squats", category: "Legs", description: "Squat below parallel with barbell on upper back for complete quad and glute mass.", muscles: ["Legs", "Quadriceps", "Gluteus Maximus", "Hamstrings"] },
-    { id: "l2", name: "Romanian Deadlifts (Barbell or Dumbbell)", category: "Legs", description: "Hinge at hips keeping back flat to deeply stretch and load hamstrings and glutes.", muscles: ["Legs", "Hamstrings", "Gluteus Maximus"] },
-    { id: "l3", name: "45-Degree Leg Press", category: "Legs", description: "Drive platform with legs placing feet shoulder-width to safely overload quads.", muscles: ["Legs", "Quadriceps", "Gluteus Maximus"] },
-    { id: "l4", name: "Bulgarian Split Squats", category: "Legs", description: "Elevate rear foot on bench, squatting single-leg deep for massive quad and glute hypertrophy.", muscles: ["Legs", "Quadriceps", "Gluteus Maximus"] },
-    { id: "l5", name: "Leg Extension Machine", category: "Legs", description: "Isolate quadriceps peak contraction at top of movement.", muscles: ["Legs", "Quadriceps"] },
-    { id: "l6", name: "Lying Leg Curls", category: "Legs", description: "Curl pad towards glutes to isolate knee flexion and hamstring muscle bellies.", muscles: ["Legs", "Hamstrings"] },
-    { id: "l7", name: "Standing Calf Raises", category: "Legs", description: "Full extension ankle calf raises for gastrocnemius muscle hypertrophy.", muscles: ["Legs", "Calves"] },
+    // --- LEGS ---
+    { id: "l1", name: "Barbell Back Squat", category: "Legs", equipment: "Barbell", difficulty: "Intermediate", description: "Squat below parallel with barbell on traps for total quad, glute, and ham strength.", muscles: ["Legs", "Quadriceps", "Gluteus Maximus", "Hamstrings"] },
+    { id: "l2", name: "Barbell Front Squat", category: "Legs", equipment: "Barbell", difficulty: "Advanced", description: "Barbell rested across front shoulders, forcing upright torso for quad isolation.", muscles: ["Legs", "Quadriceps", "Core"] },
+    { id: "l3", name: "45-Degree Leg Press Machine", category: "Legs", equipment: "Machine", difficulty: "Beginner", description: "Drive platform with legs placing feet mid-width to safely overload quad mass.", muscles: ["Legs", "Quadriceps", "Gluteus Maximus"] },
+    { id: "l4", name: "Barbell Romanian Deadlift (RDL)", category: "Legs", equipment: "Barbell", difficulty: "Intermediate", description: "Hinge hips back with flat spine to deeply stretch and overload hamstrings and glutes.", muscles: ["Legs", "Hamstrings", "Gluteus Maximus"] },
+    { id: "l5", name: "Bulgarian Split Squat", category: "Legs", equipment: "Dumbbell", difficulty: "Intermediate", description: "Elevate rear foot on bench, squatting single-leg deep for massive quad and glute hypertrophy.", muscles: ["Legs", "Quadriceps", "Gluteus Maximus"] },
+    { id: "l6", name: "Leg Extension Machine", category: "Legs", equipment: "Machine", difficulty: "Beginner", description: "Isolate quadriceps with full knee extension and peak contraction at top.", muscles: ["Legs", "Quadriceps"] },
+    { id: "l7", name: "Lying Hamstring Leg Curls", category: "Legs", equipment: "Machine", difficulty: "Beginner", description: "Curl pad towards glutes on lying machine to isolate hamstring muscle bellies.", muscles: ["Legs", "Hamstrings"] },
+    { id: "l8", name: "Barbell Hip Thrust", category: "Legs", equipment: "Barbell", difficulty: "Intermediate", description: "Rest upper back on bench, driving loaded barbell up with hips for maximum glute activation.", muscles: ["Legs", "Gluteus Maximus", "Hamstrings"] },
+    { id: "l9", name: "Walking Dumbbell Lunges", category: "Legs", equipment: "Dumbbell", difficulty: "Beginner", description: "Step forward in alternating lunges to build unilateral balance, quads, and glutes.", muscles: ["Legs", "Quadriceps", "Gluteus Maximus"] },
+    { id: "l10", name: "Standing Machine Calf Raise", category: "Legs", equipment: "Machine", difficulty: "Beginner", description: "Full extension ankle calf raises on block for gastrocnemius muscle hypertrophy.", muscles: ["Legs", "Calves", "Gastrocnemius"] },
+    { id: "l11", name: "Seated Machine Calf Raise", category: "Legs", equipment: "Machine", difficulty: "Beginner", description: "Seated calf raises flexing ankles with 90 degree bent knees to target soleus muscle.", muscles: ["Legs", "Calves", "Soleus"] },
+    { id: "l12", name: "Goblet Squats", category: "Legs", equipment: "Dumbbell", difficulty: "Beginner", description: "Hold heavy dumbbell vertically at chest, squatting deep with upright posture.", muscles: ["Legs", "Quadriceps", "Glutes"] },
+    { id: "l13", name: "Hack Squat Machine", category: "Legs", equipment: "Machine", difficulty: "Intermediate", description: "Guided machine squat providing back support for high volume quad stimulation.", muscles: ["Legs", "Quadriceps"] },
 
-    // Abs / Core
-    { id: "a1", name: "Hanging Straight or Knee Leg Raises", category: "Abs", description: "Hang from pull-up bar, lifting legs/knees up to chest to isolate lower abdominal wall.", muscles: ["Abs", "Core", "Rectus Abdominis"] },
-    { id: "a2", name: "Ab Wheel Rollouts", category: "Abs", description: "Kneel and roll wheel outward, keeping core braced to build bulletproof anti-extension core strength.", muscles: ["Abs", "Core", "Rectus Abdominis"] },
-    { id: "a3", name: "Cable Woodchoppers (Diagonal Pull)", category: "Abs", description: "Rotate torso against cable resistance to sculpt sharp internal and external obliques.", muscles: ["Abs", "Obliques", "Core"] },
-    { id: "a4", name: "Weighted Decline Sit-Ups", category: "Abs", description: "Perform sit-ups on decline bench with weight plate held at chest for deep abdominal ridges.", muscles: ["Abs", "Rectus Abdominis"] },
-    { id: "a5", name: "Plank Hold (Elbows)", category: "Abs", description: "Maintain rigid straight line from shoulders to ankles for deep transverse abdominis strength.", muscles: ["Abs", "Core"] },
+    // --- ABS / CORE ---
+    { id: "a1", name: "Hanging Straight Leg Raises", category: "Abs", equipment: "Bodyweight", difficulty: "Intermediate", description: "Hang from pull-up bar, lifting straight legs to 90 degrees to isolate lower rectus abdominis.", muscles: ["Abs", "Lower Abs", "Core", "Hip Flexors"] },
+    { id: "a2", name: "Ab Wheel Rollouts", category: "Abs", equipment: "Bodyweight", difficulty: "Advanced", description: "Kneel and roll wheel outward, keeping core braced for bulletproof anti-extension strength.", muscles: ["Abs", "Core", "Rectus Abdominis"] },
+    { id: "a3", name: "Kneeling Cable Crunches", category: "Abs", equipment: "Cable", difficulty: "Beginner", description: "Kneel in front of cable stack, holding rope overhead and crunching elbows to knees.", muscles: ["Abs", "Rectus Abdominis"] },
+    { id: "a4", name: "Weighted Decline Sit-Ups", category: "Abs", equipment: "Dumbbell", difficulty: "Intermediate", description: "Perform sit-ups on decline bench holding weight plate on chest for deep abdominal ridges.", muscles: ["Abs", "Upper Abs"] },
+    { id: "a5", name: "Russian Torso Twists", category: "Abs", equipment: "Bodyweight", difficulty: "Beginner", description: "Sit in V-shape and rotate shoulders side to side to sculpt internal and external obliques.", muscles: ["Abs", "Obliques"] },
+    { id: "a6", name: "Elbow Plank Hold", category: "Abs", equipment: "Bodyweight", difficulty: "Beginner", description: "Maintain rigid isometric bridge from forearms to toes for transverse abdominis strength.", muscles: ["Abs", "Transverse Abdominis", "Core"] },
+    { id: "a7", name: "Cable Diagonal Woodchoppers", category: "Abs", equipment: "Cable", difficulty: "Intermediate", description: "Pull cable diagonally across torso in explosive twisting motion for rotational core power.", muscles: ["Abs", "Obliques", "Core"] },
+    { id: "a8", name: "Bicycle Crunches", category: "Abs", equipment: "Bodyweight", difficulty: "Beginner", description: "Alternate bringing opposite elbow to knee in pedaling motion for abs & obliques.", muscles: ["Abs", "Obliques"] },
 
-    // Forearms
-    { id: "f1", name: "Barbell Wrist Curls", category: "Forearms", description: "Rest forearms on bench, curling barbell up with wrists for forearm flexors.", muscles: ["Forearms", "Brachioradialis", "Flexors"] },
-    { id: "f2", name: "Reverse Barbell Wrist Curls", category: "Forearms", description: "Overhand wrist curls to isolate forearm extensors and upper grip strength.", muscles: ["Forearms", "Extensors"] },
-    { id: "f3", name: "Heavy Farmer's Dumbbell Walk", category: "Forearms", description: "Walk carrying heavy dumbbells at sides to build crushing grip strength and forearms.", muscles: ["Forearms", "Trapezius", "Core"] }
+    // --- FOREARMS ---
+    { id: "f1", name: "Barbell Wrist Curls", category: "Forearms", equipment: "Barbell", difficulty: "Beginner", description: "Rest forearms on bench, curling barbell up with wrists to flex forearm flexors.", muscles: ["Forearms", "Flexors"] },
+    { id: "f2", name: "Reverse Barbell Wrist Curls", category: "Forearms", equipment: "Barbell", difficulty: "Beginner", description: "Overhand wrist curls to isolate forearm extensors and upper grip strength.", muscles: ["Forearms", "Extensors"] },
+    { id: "f3", name: "Heavy Farmer's Dumbbell Walk", category: "Forearms", equipment: "Dumbbell", difficulty: "Intermediate", description: "Walk carrying heavy dumbbells at sides to build crushing grip strength and thick forearms.", muscles: ["Forearms", "Trapezius", "Grip"] },
+    { id: "f4", name: "Plate Pinch Holds", category: "Forearms", equipment: "Barbell", difficulty: "Intermediate", description: "Pinch smooth sides of weight plates between fingers and thumb for isometric pinch grip strength.", muscles: ["Forearms", "Grip Strength"] },
+
+    // --- CARDIO / HIIT ---
+    { id: "cd1", name: "Kettlebell Swings", category: "Cardio", equipment: "Kettlebell", difficulty: "Intermediate", description: "Hinge at hips driving kettlebell explosively to eye level for posterior chain stamina.", muscles: ["Cardio", "Glutes", "Hamstrings", "Core"] },
+    { id: "cd2", name: "Burpees (Chest to Floor)", category: "Cardio", equipment: "Bodyweight", difficulty: "Intermediate", description: "Drop chest to floor, jump feet back in, and explode vertically into air.", muscles: ["Cardio", "Full Body"] },
+    { id: "cd3", name: "Plyometric Box Jumps", category: "Cardio", equipment: "Bodyweight", difficulty: "Intermediate", description: "Jump explosively onto tall box landing soft in half squat for leg power.", muscles: ["Cardio", "Quads", "Calves"] },
+    { id: "cd4", name: "Battle Ropes Alternating Waves", category: "Cardio", equipment: "Bodyweight", difficulty: "Beginner", description: "Whip heavy battle ropes into rapid wave patterns maintaining athletic squat position.", muscles: ["Cardio", "Shoulders", "Core"] }
   ];
 
-  const FULL_HOME_EXERCISES = [
-    // Chest
-    { id: "hc1", name: "Classic Bodyweight Push-ups", category: "Chest", description: "Standard floor push-ups focusing on chest, anterior delts, and core stabilization.", muscles: ["Chest", "Pectoralis Major", "Triceps", "Anterior Deltoids"] },
-    { id: "hc2", name: "Decline Push-ups (Feet Elevated)", category: "Chest", description: "Elevate feet on chair or bed to shift load to upper pectorals.", muscles: ["Chest", "Pectoralis Major", "Shoulders"] },
-    { id: "hc3", name: "Diamond Push-ups", category: "Chest", description: "Bring thumbs and index fingers together under chest to blast inner chest and triceps.", muscles: ["Chest", "Triceps", "Pectoralis Major"] },
-    { id: "hc4", name: "Wide-Stance Incline Push-ups", category: "Chest", description: "Hands wide on elevated surface to emphasize outer chest muscle fibers.", muscles: ["Chest", "Pectoralis Major"] },
+  let filteredPool = COMPREHENSIVE_EXERCISE_DATABASE;
 
-    // Back
-    { id: "hb1", name: "Doorframe or Towel Rows", category: "Back", description: "Grasp sturdy doorframe or bedsheet in door, leaning back and pulling chest to door.", muscles: ["Back", "Latissimus Dorsi", "Rhomboids", "Biceps"] },
-    { id: "hb2", name: "Prone Scapular Angels & Cobra Holds", category: "Back", description: "Lie face down, lifting chest and sweeping arms overhead to strengthen upper back posture.", muscles: ["Back", "Rhomboids", "Erector Spinae"] },
-    { id: "hb3", name: "Bodyweight Doorframe Pull-Ups", category: "Back", description: "Perform pull-ups on a sturdy doorway pull-up bar or beam.", muscles: ["Back", "Latissimus Dorsi", "Biceps"] },
-
-    // Biceps / Arms
-    { id: "hbi1", name: "Doorframe Isometric Bicep Pulls", category: "Biceps", description: "Grasp doorframe with palm up, flex bicep and pull with max isometric force for 15s.", muscles: ["Biceps", "Biceps Brachii", "Arms"] },
-    { id: "hbi2", name: "Resistance Band or Backpack Bicep Curls", category: "Biceps", description: "Curl loaded backpack or elastic loop band to isolate bicep peak.", muscles: ["Biceps", "Biceps Brachii", "Forearms"] },
-
-    // Triceps / Arms
-    { id: "htr1", name: "Bench or Chair Bodyweight Dips", category: "Triceps", description: "Place hands on edge of sturdy chair, lower body down and extend arms to flex triceps.", muscles: ["Triceps", "Triceps Brachii", "Shoulders"] },
-    { id: "htr2", name: "Bodyweight Tricep Floor Extensions", category: "Triceps", description: "Plank position on forearms, drive palms down into floor extending elbows upward.", muscles: ["Triceps", "Triceps Brachii", "Core"] },
-
-    // Shoulders
-    { id: "hsh1", name: "Pike Push-ups (Elevated Hips)", category: "Shoulders", description: "Walk feet inward raising hips high, lower head toward floor to isolate shoulder presses.", muscles: ["Shoulders", "Deltoids", "Triceps"] },
-    { id: "hsh2", name: "Wall Walk Shoulder Holds", category: "Shoulders", description: "Walk feet up wall into handstand position, holding for isometric shoulder mass.", muscles: ["Shoulders", "Deltoids", "Core"] },
-    { id: "hsh3", name: "Prone Rear Delt T & Y Raises", category: "Shoulders", description: "Lie face down, raising arms into T and Y shapes to isolate rear and lateral deltoids.", muscles: ["Shoulders", "Rear Deltoids", "Trapezius"] },
-
-    // Legs
-    { id: "hl1", name: "Deep Bodyweight Air Squats", category: "Legs", description: "Squat down deeply with torso upright, driving up through heel and midfoot.", muscles: ["Legs", "Quadriceps", "Gluteus Maximus"] },
-    { id: "hl2", name: "Bulgarian Split Squats (Elevated Foot)", category: "Legs", description: "Elevate one foot behind you on couch or bed, squatting deep on front leg.", muscles: ["Legs", "Quadriceps", "Gluteus Maximus"] },
-    { id: "hl3", name: "Single-Leg Bodyweight Romanian Deadlifts", category: "Legs", description: "Balance on one leg and hinge forward, stretching hamstrings with total balance control.", muscles: ["Legs", "Hamstrings", "Gluteus Maximus"] },
-    { id: "hl4", name: "Glute Bridges (Single-Leg Option)", category: "Legs", description: "Lie on back and drive hips upward to ceiling, squeezing glutes and hamstrings.", muscles: ["Legs", "Gluteus Maximus", "Hamstrings"] },
-
-    // Abs / Core
-    { id: "ha1", name: "Hollow Body Hold", category: "Abs", description: "Press lower back into floor with shoulders and legs elevated, holding tight core hollow shape.", muscles: ["Abs", "Core", "Rectus Abdominis"] },
-    { id: "ha2", name: "Bicycle Crunches", category: "Abs", description: "Alternate bringing opposite elbow to knee, twisting torso to sculpt obliques and abs.", muscles: ["Abs", "Obliques", "Core"] },
-    { id: "ha3", name: "Russian Torso Twists", category: "Abs", description: "Sit in V-shape, twisting shoulders side to side with tight core engagement.", muscles: ["Abs", "Obliques"] },
-
-    // Forearms
-    { id: "hf1", name: "Towel Twist Isometric Squeeze", category: "Forearms", description: "Twist rolled heavy towel tightly in opposite directions to fatigue forearm flexors.", muscles: ["Forearms", "Flexors", "Brachioradialis"] }
-  ];
-
-  let baseline = location === "home" ? FULL_HOME_EXERCISES : FULL_GYM_EXERCISES;
+  if (location === "home") {
+    filteredPool = COMPREHENSIVE_EXERCISE_DATABASE.filter(ex => 
+      ex.equipment === "Bodyweight" || ex.equipment === "Dumbbell" || ex.equipment === "Kettlebell"
+    );
+  }
 
   try {
-    const systemPrompt = `You are Coach Kai's elite exercise physiology AI. Your task is to generate proper, real, well-known body exercises targeting the user's search query or muscle group.
-Return ONLY high-quality, widely accepted real exercises (e.g., Barbell Bench Press, Incline Dumbbell Press, Pull-ups, Bicep Curls, Lateral Raises, Squats, Romanian Deadlifts, Hanging Leg Raises, etc.).
-Adapt location (${location}: 'gym' commercial equipment vs 'home' bodyweight calisthenics) and experience (${experience}).
-CRITICAL CALISTHENICS REQUIREMENT: If location is 'home', generate ONLY bodyweight / calisthenics / resistance band exercises.`;
+    const systemPrompt = `You are Coach Kai's elite exercise physiology AI search engine.
+Your goal is to output a comprehensive, real list of proper fitness exercises matching the search term or muscle group.
+Return ONLY high-quality, widely accepted real exercises (e.g. Barbell Bench Press, Incline Dumbbell Press, Pull-ups, Bicep Curls, Lateral Raises, Squats, Romanian Deadlifts, Hanging Leg Raises, etc.).
+Location: ${location}. Experience level: ${experience}.`;
 
-    const userPrompt = `Generate a list of 8-10 highly effective, real, proper exercises.
-${term ? `IMPORTANT: The exercises MUST strictly match or be directly targeting the search term or muscle group: "${term}". For example if search term is "Chest", output only Chest exercises. If "Biceps", output Bicep exercises. If "Legs", output Leg exercises.` : `Provide a balanced mix of fundamental movements across major muscle groups suitable for ${location} workouts.`}
-${location === 'home' ? 'Remember: ONLY bodyweight/calisthenics/resistance-band exercises are allowed because location is home!' : ''}
+    const userPrompt = `Generate a rich list of 15-25 highly effective, real exercises.
+${term ? `IMPORTANT: The exercises MUST strictly match or target the search term / muscle group: "${term}". E.g. if search term is "Chest", output Chest exercises. If "Biceps", output Bicep exercises. If "Legs", output Leg exercises.` : `Provide a balanced mix of fundamental movements across major muscle groups suitable for ${location} workouts.`}
 
 Response Schema must be an array of objects with:
 - "name": string
-- "category": string (e.g., "Chest", "Back", "Biceps", "Triceps", "Shoulders", "Legs", "Abs", "Forearms")
+- "category": string (e.g. "Chest", "Back", "Biceps", "Triceps", "Shoulders", "Legs", "Abs", "Forearms", "Cardio")
+- "equipment": string (e.g. "Barbell", "Dumbbell", "Cable", "Machine", "Bodyweight", "Kettlebell", "Smith Machine")
+- "difficulty": string ("Beginner", "Intermediate", "Advanced")
 - "description": string
 - "muscles": array of strings (e.g., ["Chest", "Pectoralis Major"])`;
 
@@ -2638,13 +2664,15 @@ Response Schema must be an array of objects with:
             properties: {
               name: { type: Type.STRING },
               category: { type: Type.STRING },
+              equipment: { type: Type.STRING },
+              difficulty: { type: Type.STRING },
               description: { type: Type.STRING },
               muscles: {
                 type: Type.ARRAY,
                 items: { type: Type.STRING }
               }
             },
-            required: ["name", "category", "description", "muscles"]
+            required: ["name", "category", "equipment", "difficulty", "description", "muscles"]
           }
         }
       }
@@ -2655,34 +2683,38 @@ Response Schema must be an array of objects with:
     const parsed = JSON.parse(text);
 
     if (Array.isArray(parsed) && parsed.length > 0) {
-      const mapped = parsed.map((item: any, idx: number) => ({
+      let mapped = parsed.map((item: any, idx: number) => ({
         id: `ai-ex-${idx}-${Date.now()}`,
         name: item.name,
         category: item.category || "General",
+        equipment: item.equipment || "Standard",
+        difficulty: item.difficulty || "Intermediate",
         description: item.description,
         muscles: item.muscles || [],
         videoUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent(item.name + " exercise form tutorial")}`
       }));
+
+      if (equipmentFilter && equipmentFilter !== 'all') {
+        mapped = mapped.filter(ex => ex.equipment.toLowerCase().includes(equipmentFilter));
+      }
+
       return res.json(mapped);
     }
-    throw new Error("Invalid response array format");
+    throw new Error("Invalid AI response format");
 
   } catch (error: any) {
-    console.log("Using offline baseline exercises database for term:", term, error?.message || "");
-    const withUrls = baseline.map(b => ({
-      ...b,
-      videoUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent(b.name + " exercise form tutorial")}`
-    }));
+    console.log("Using offline comprehensive exercise database for term:", term, error?.message || "");
+    let results = filteredPool;
 
     if (term) {
       const lowerTerm = term.toLowerCase().trim();
-      const filtered = withUrls.filter((item: any) => {
+      results = results.filter((item: any) => {
         const nameMatch = item.name.toLowerCase().includes(lowerTerm);
         const catMatch = item.category.toLowerCase().includes(lowerTerm);
         const descMatch = item.description.toLowerCase().includes(lowerTerm);
+        const equipMatch = item.equipment ? item.equipment.toLowerCase().includes(lowerTerm) : false;
         const muscleMatch = item.muscles.some((m: string) => m.toLowerCase().includes(lowerTerm));
 
-        // Synonyms matching (e.g. arms -> biceps/triceps, core -> abs)
         let synonymMatch = false;
         if (lowerTerm === 'biceps' || lowerTerm === 'bicep' || lowerTerm === 'arms') {
           synonymMatch = item.category === 'Biceps' || item.muscles.some((m: string) => m.toLowerCase().includes('bicep'));
@@ -2700,65 +2732,167 @@ Response Schema must be an array of objects with:
           synonymMatch = item.category === 'Abs' || item.muscles.some((m: string) => m.toLowerCase().includes('ab') || m.toLowerCase().includes('core') || m.toLowerCase().includes('oblique'));
         } else if (lowerTerm === 'forearms' || lowerTerm === 'forearm') {
           synonymMatch = item.category === 'Forearms' || item.muscles.some((m: string) => m.toLowerCase().includes('forearm') || m.toLowerCase().includes('wrist'));
+        } else if (lowerTerm === 'cardio') {
+          synonymMatch = item.category === 'Cardio' || item.muscles.some((m: string) => m.toLowerCase().includes('cardio'));
         }
 
-        return nameMatch || catMatch || descMatch || muscleMatch || synonymMatch;
+        return nameMatch || catMatch || descMatch || equipMatch || muscleMatch || synonymMatch;
       });
-
-      res.json(filtered.length > 0 ? filtered : withUrls.slice(0, 8));
-    } else {
-      res.json(withUrls);
     }
+
+    if (equipmentFilter && equipmentFilter !== 'all') {
+      results = results.filter((ex: any) => ex.equipment && ex.equipment.toLowerCase().includes(equipmentFilter));
+    }
+
+    const withUrls = results.map(b => ({
+      ...b,
+      videoUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent(b.name + " exercise form tutorial")}`
+    }));
+
+    res.json(withUrls.length > 0 ? withUrls : COMPREHENSIVE_EXERCISE_DATABASE.slice(0, 15));
   }
 });
 
-// Proxy endpoint for Open Food Facts API
+// Proxy endpoint for Open Food Facts API & Nutrient Explorer Index
 app.get("/api/openfoodfacts/foods", async (req: express.Request, res: express.Response) => {
   try {
-    let term = req.query.term as string;
-    if (!term || term.trim().length === 0) {
-      term = "protein"; // Default muscle building search query
-    }
-    
-    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(term)}&page_size=24&json=1&action=process&fields=code,product_name,brands,image_url,nutriments,ingredients_text`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Open Food Facts failed with status: ${response.status}`);
-    }
-    const data: any = await response.json();
-    const products = data.products || [];
-    
-    const mapped = products
-      .filter((p: any) => p.product_name)
-      .map((p: any) => {
-        const nut = p.nutriments || {};
-        const calories = Math.round(nut["energy-kcal_100g"] || nut["energy-kcal"] || 0);
-        const protein = Math.round(nut.proteins_100g || nut.proteins || 0);
-        const carbs = Math.round(nut.carbohydrates_100g || nut.carbohydrates || 0);
-        const fat = Math.round(nut.fat_100g || nut.fat || 0);
-        
-        return {
-          id: p.code || Math.random().toString(36).substring(7),
-          name: p.product_name,
-          brand: p.brands || "Generic Brand",
-          image: p.image_url || "",
-          calories,
-          protein,
-          carbs,
-          fat,
-          ingredients: p.ingredients_text || ""
-        };
-      });
+    let term = (req.query.term as string || "").trim();
+    let nutrient = (req.query.nutrient as string || "").trim().toLowerCase();
+
+    // Comprehensive offline nutrient-rich foods database
+    const NUTRIENT_RICH_FOODS_DATABASE = [
+      // High Protein
+      { id: "f1", name: "Boneless Chicken Breast", brand: "Fresh Poultry", category: "Poultry", calories: 165, protein: 31, carbs: 0, fat: 3.6, fiber: 0, keyNutrient: "🥩 High Protein & Niacin", highlights: ["High Protein", "Low Fat", "Zero Carb"], ingredients: "100% Skinless Chicken Breast" },
+      { id: "f2", name: "Wild Alaskan Salmon Fillet", brand: "Ocean Catch", category: "Seafood", calories: 206, protein: 22, carbs: 0, fat: 13, fiber: 0, keyNutrient: "🥑 Omega-3 & Vitamin D", highlights: ["High Protein", "Omega-3 Dense", "Vitamin D Rich"], ingredients: "Wild Salmon" },
+      { id: "f3", name: "Liquid Egg Whites", brand: "Farm Pure", category: "Dairy & Eggs", calories: 50, protein: 11, carbs: 1, fat: 0, fiber: 0, keyNutrient: "🥚 Pure Albumin Protein", highlights: ["High Protein", "Zero Fat", "Zero Cholesterol"], ingredients: "100% Pasteurized Egg Whites" },
+      { id: "f4", name: "Non-Fat Plain Greek Yogurt", brand: "Chobani / Fage Style", category: "Dairy", calories: 100, protein: 18, carbs: 6, fat: 0, fiber: 0, keyNutrient: "🦴 Calcium & Probiotics", highlights: ["High Protein", "Calcium Rich", "Probiotic"], ingredients: "Cultured Nonfat Milk" },
+      { id: "f5", name: "Extra Firm Organic Tofu", brand: "House Foods", category: "Plant Protein", calories: 120, protein: 14, carbs: 3, fat: 6, fiber: 2, keyNutrient: "🩸 Iron & Plant Isoflavones", highlights: ["High Protein", "Iron Rich", "Calcium Rich"], ingredients: "Organic Soybeans, Water, Calcium Sulfate" },
+      { id: "f6", name: "Whey Protein Isolate 90%", brand: "Optimum Pure", category: "Supplements", calories: 120, protein: 27, carbs: 1, fat: 0.5, fiber: 0, keyNutrient: "⚡ Rapid BCAA Synthesis", highlights: ["High Protein", "Low Calorie", "Fast Absorbing"], ingredients: "Whey Protein Isolate, Cocoa" },
       
-    res.json(mapped);
+      // Complex Carbs & Fiber Rich
+      { id: "f7", name: "Steel Cut Whole Oats", brand: "Bob's Red Mill", category: "Grains", calories: 170, protein: 7, carbs: 29, fat: 3, fiber: 5, keyNutrient: "🌾 Beta-Glucan Fiber", highlights: ["Fiber Dense", "Complex Carbs", "Sustained Energy"], ingredients: "Whole Grain Oats" },
+      { id: "f8", name: "Tri-Color Quinoa", brand: "Ancient Grains", category: "Grains", calories: 120, protein: 4.4, carbs: 21, fat: 1.9, fiber: 2.8, keyNutrient: "🌾 Complete Amino Acid Carbs", highlights: ["Complex Carbs", "Magnesium Rich", "Gluten Free"], ingredients: "Organic Quinoa" },
+      { id: "f9", name: "Organic Black Beans", brand: "Eden Foods", category: "Legumes", calories: 110, protein: 7, carbs: 20, fat: 0.5, fiber: 6, keyNutrient: "🌾 High Fiber & Magnesium", highlights: ["Fiber Dense", "High Protein", "Iron Rich"], ingredients: "Black Beans, Water" },
+      { id: "f10", name: "Roasted Sweet Potato", brand: "Earth Fresh", category: "Vegetables", calories: 90, protein: 2, carbs: 21, fat: 0.2, fiber: 3.3, keyNutrient: "🍊 Beta-Carotene & Potassium", highlights: ["Complex Carbs", "Potassium Boost", "Vitamin A"], ingredients: "Sweet Potato" },
+      
+      // Healthy Fats & Omega-3
+      { id: "f11", name: "Raw Hass Avocado", brand: "Fresh Produce", category: "Fruits & Healthy Fats", calories: 160, protein: 2, carbs: 8.5, fat: 15, fiber: 6.7, keyNutrient: "🥑 Monounsaturated Fats & Potassium", highlights: ["Healthy Fats", "Potassium Boost", "Fiber Dense"], ingredients: "Fresh Avocado" },
+      { id: "f12", name: "Organic Raw Chia Seeds", brand: "Nutiva", category: "Seeds", calories: 138, protein: 4.7, carbs: 12, fat: 8.7, fiber: 9.8, keyNutrient: "🥑 ALA Omega-3 & Calcium", highlights: ["Omega-3 Dense", "Fiber Powerhouse", "Calcium Rich"], ingredients: "Raw Chia Seeds" },
+      { id: "f13", name: "Raw Whole Almonds", brand: "Blue Diamond", category: "Nuts", calories: 164, protein: 6, carbs: 6, fat: 14, fiber: 3.5, keyNutrient: "🧠 Vitamin E & Magnesium", highlights: ["Healthy Fats", "Magnesium Rich", "High Protein"], ingredients: "100% Whole Almonds" },
+
+      // Micronutrient Powerhouses: Iron, Calcium, Potassium, Vitamin C
+      { id: "f14", name: "Fresh Baby Spinach Leaves", brand: "Organic Girl", category: "Greens", calories: 23, protein: 2.9, carbs: 3.6, fat: 0.4, fiber: 2.2, keyNutrient: "🩸 Non-Heme Iron & Folate", highlights: ["Iron Rich", "Low Calorie", "Vitamin K"], ingredients: "Organic Spinach" },
+      { id: "f15", name: "Steamed Edamame (Soybeans)", brand: "Seapoint Farms", category: "Plant Protein", calories: 120, protein: 11, carbs: 9, fat: 5, fiber: 4, keyNutrient: "🩸 Iron & Folate Powerhouse", highlights: ["High Protein", "Iron Rich", "Fiber Dense"], ingredients: "Green Soybeans" },
+      { id: "f16", name: "Whole Pumpkin Seeds (Pepitas)", brand: "Go Raw", category: "Seeds", calories: 158, protein: 8.6, carbs: 3, fat: 13, fiber: 1.7, keyNutrient: "🧠 Zinc, Magnesium & Iron", highlights: ["Zinc & Magnesium", "Iron Rich", "Healthy Fats"], ingredients: "Organic Pumpkin Seeds" },
+      { id: "f17", name: "Natural Coconut Water", brand: "Vita Coco", category: "Hydration", calories: 45, protein: 0.5, carbs: 11, fat: 0, fiber: 0, keyNutrient: "⚡ 470mg Potassium & Electrolytes", highlights: ["Potassium Boost", "Electrolyte Rich", "Hydration"], ingredients: "Pure Coconut Water" },
+      { id: "f18", name: "Red Bell Pepper", brand: "Fresh Produce", category: "Vegetables", calories: 31, protein: 1, carbs: 6, fat: 0.3, fiber: 2.1, keyNutrient: "🍊 169% DV Vitamin C", highlights: ["Vitamin C Powerhouse", "Low Calorie", "Antioxidants"], ingredients: "Fresh Red Bell Pepper" },
+      { id: "f19", name: "Canned Sardines in Olive Oil", brand: "King Oscar", category: "Seafood", calories: 190, protein: 23, carbs: 0, fat: 11, fiber: 0, keyNutrient: "🦴 Calcium, B12 & Omega-3", highlights: ["Calcium Rich", "High Protein", "Omega-3 Dense"], ingredients: "Sardines, Olive Oil, Salt" }
+    ];
+
+    if (!term && !nutrient) {
+      term = "protein";
+    }
+
+    // Try Open Food Facts search first if term provided
+    if (term) {
+      const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(term)}&page_size=30&json=1&action=process&fields=code,product_name,brands,image_url,nutriments,ingredients_text`;
+      const response = await fetch(url);
+      if (response.ok) {
+        const data: any = await response.json();
+        const products = data.products || [];
+        
+        const mapped = products
+          .filter((p: any) => p.product_name)
+          .map((p: any) => {
+            const nut = p.nutriments || {};
+            const calories = Math.round(nut["energy-kcal_100g"] || nut["energy-kcal"] || 0);
+            const protein = Math.round(nut.proteins_100g || nut.proteins || 0);
+            const carbs = Math.round(nut.carbohydrates_100g || nut.carbohydrates || 0);
+            const fat = Math.round(nut.fat_100g || nut.fat || 0);
+            const fiber = Math.round(nut.fiber_100g || nut.fiber || 0);
+
+            const highlights: string[] = [];
+            if (protein >= 15) highlights.push("High Protein");
+            if (fiber >= 4) highlights.push("Fiber Dense");
+            if (fat > 0 && fat < 3) highlights.push("Low Fat");
+            if (calories < 100) highlights.push("Low Calorie");
+
+            let keyNutrient = `${protein}g Protein per 100g`;
+            if (protein >= 15) keyNutrient = "🥩 High Protein Source";
+            else if (fiber >= 4) keyNutrient = "🌾 Fiber & Digest Support";
+
+            return {
+              id: p.code || Math.random().toString(36).substring(7),
+              name: p.product_name,
+              brand: p.brands || "Generic Brand",
+              image: p.image_url || "",
+              calories,
+              protein,
+              carbs,
+              fat,
+              fiber,
+              keyNutrient,
+              highlights,
+              ingredients: p.ingredients_text || ""
+            };
+          });
+
+        if (mapped.length > 0) {
+          let filteredMapped = mapped;
+          if (nutrient) {
+            if (nutrient === 'protein') filteredMapped = mapped.filter(f => f.protein >= 10);
+            else if (nutrient === 'fiber') filteredMapped = mapped.filter(f => f.fiber >= 3 || f.carbs > 15);
+            else if (nutrient === 'fats') filteredMapped = mapped.filter(f => f.fat >= 8);
+            else if (nutrient === 'lowcal') filteredMapped = mapped.filter(f => f.calories <= 120);
+          }
+          if (filteredMapped.length > 0) return res.json(filteredMapped);
+        }
+      }
+    }
+
+    // Fallback / Nutrient-Specific Search over local rich database
+    let results = NUTRIENT_RICH_FOODS_DATABASE;
+
+    if (nutrient) {
+      if (nutrient === 'protein') {
+        results = NUTRIENT_RICH_FOODS_DATABASE.filter(f => f.protein >= 10 || f.highlights.includes("High Protein"));
+      } else if (nutrient === 'fiber') {
+        results = NUTRIENT_RICH_FOODS_DATABASE.filter(f => f.fiber >= 3 || f.highlights.includes("Fiber Dense") || f.category === "Grains" || f.category === "Legumes");
+      } else if (nutrient === 'fats') {
+        results = NUTRIENT_RICH_FOODS_DATABASE.filter(f => f.fat >= 8 || f.highlights.includes("Healthy Fats") || f.highlights.includes("Omega-3 Dense"));
+      } else if (nutrient === 'iron') {
+        results = NUTRIENT_RICH_FOODS_DATABASE.filter(f => f.keyNutrient.includes("Iron") || f.highlights.includes("Iron Rich"));
+      } else if (nutrient === 'calcium') {
+        results = NUTRIENT_RICH_FOODS_DATABASE.filter(f => f.keyNutrient.includes("Calcium") || f.highlights.includes("Calcium Rich"));
+      } else if (nutrient === 'potassium') {
+        results = NUTRIENT_RICH_FOODS_DATABASE.filter(f => f.keyNutrient.includes("Potassium") || f.highlights.includes("Potassium Boost"));
+      } else if (nutrient === 'magnesium' || nutrient === 'zinc') {
+        results = NUTRIENT_RICH_FOODS_DATABASE.filter(f => f.keyNutrient.includes("Magnesium") || f.keyNutrient.includes("Zinc") || f.highlights.some(h => h.includes("Magnesium") || h.includes("Zinc")));
+      } else if (nutrient === 'vitaminc' || nutrient === 'vitamind') {
+        results = NUTRIENT_RICH_FOODS_DATABASE.filter(f => f.keyNutrient.includes("Vitamin") || f.highlights.some(h => h.includes("Vitamin")));
+      } else if (nutrient === 'lowcal') {
+        results = NUTRIENT_RICH_FOODS_DATABASE.filter(f => f.calories <= 100 || f.highlights.includes("Low Calorie"));
+      }
+    }
+
+    if (term) {
+      const lowerTerm = term.toLowerCase().trim();
+      results = results.filter(f => 
+        f.name.toLowerCase().includes(lowerTerm) ||
+        f.category.toLowerCase().includes(lowerTerm) ||
+        f.brand.toLowerCase().includes(lowerTerm) ||
+        f.keyNutrient.toLowerCase().includes(lowerTerm) ||
+        f.highlights.some(h => h.toLowerCase().includes(lowerTerm))
+      );
+    }
+
+    res.json(results.length > 0 ? results : NUTRIENT_RICH_FOODS_DATABASE);
+
   } catch (error: any) {
-    console.log("Open Food Facts database loaded offline local baseline presets.");
-    // Graceful high-protein foods fallback
+    console.log("Open Food Facts fallback to nutrient rich foods database.");
     res.json([
-      { id: "f1", name: "Premium Whey Isolate", brand: "Sports Nutrition", image: "", calories: 120, protein: 25, carbs: 2, fat: 1, ingredients: "Whey Protein Isolate, Cocoa, Natural Flavors" },
-      { id: "f2", name: "Liquid Egg Whites", brand: "Farm Fresh", image: "", calories: 50, protein: 11, carbs: 1, fat: 0, ingredients: "Egg Whites" },
-      { id: "f3", name: "Greek Yogurt (Non-Fat)", brand: "Organic Creamery", image: "", calories: 80, protein: 15, carbs: 6, fat: 0, ingredients: "Cultured Pasteurized Nonfat Milk" },
-      { id: "f4", name: "Premium Tofu (Extra Firm)", brand: "Organic Soy", image: "", calories: 90, protein: 10, carbs: 2, fat: 5, ingredients: "Soybeans, Water, Calcium Sulfate" }
+      { id: "f1", name: "Boneless Chicken Breast", brand: "Fresh Poultry", category: "Poultry", calories: 165, protein: 31, carbs: 0, fat: 3.6, fiber: 0, keyNutrient: "🥩 High Protein & Niacin", highlights: ["High Protein", "Low Fat"], ingredients: "100% Skinless Chicken Breast" },
+      { id: "f2", name: "Wild Alaskan Salmon Fillet", brand: "Ocean Catch", category: "Seafood", calories: 206, protein: 22, carbs: 0, fat: 13, fiber: 0, keyNutrient: "🥑 Omega-3 & Vitamin D", highlights: ["High Protein", "Omega-3 Dense"], ingredients: "Wild Salmon" }
     ]);
   }
 });

@@ -38,6 +38,8 @@ export interface UserProfile {
   photoLeft?: string; // Base64 Left Side Photo
   photoRight?: string; // Base64 Right Side Photo
   photoBack?: string; // Base64 Back Photo
+  predictedWeightRange?: string; // e.g. "72 - 78 kg"
+  predictedHeightRange?: string; // e.g. "173 - 178 cm"
   valid_full_body?: boolean;
   rejection_reason?: string | null;
   postureAssessment?: PostureAssessment;

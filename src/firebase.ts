@@ -13,6 +13,7 @@ import {
   doc, 
   setDoc, 
   getDoc, 
+  deleteDoc,
   getDocFromServer,
   collection, 
   getDocs, 
@@ -86,6 +87,19 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
+export async function ensureAuthenticatedUser() {
+  if (auth.currentUser) {
+    return auth.currentUser;
+  }
+  try {
+    const anonRes = await signInAnonymously(auth);
+    return anonRes.user;
+  } catch (err) {
+    console.warn("Background auto auth notice:", err);
+    return null;
+  }
+}
+
 export async function signInWithGoogle() {
   try {
     const result = await signInWithPopup(auth, googleProvider);
@@ -125,6 +139,19 @@ export async function registerWithEmail(email: string, pass: string) {
         } as any;
       }
     }
+    if (
+      error?.code === 'auth/email-already-in-use' ||
+      error?.message?.includes('email-already-in-use')
+    ) {
+      console.log("Email already registered. Attempting login with provided credentials...");
+      try {
+        const loginRes = await signInWithEmailAndPassword(auth, email, pass);
+        return loginRes.user;
+      } catch (loginErr: any) {
+        console.warn("Email already registered; auto-login notice:", loginErr?.message || loginErr?.code);
+        throw error;
+      }
+    }
     console.error("Email Registration Error:", error);
     throw error;
   }
@@ -154,6 +181,16 @@ export async function loginWithEmail(email: string, pass: string) {
         } as any;
       }
     }
+    if (
+      error?.code === 'auth/user-not-found' ||
+      error?.code === 'auth/wrong-password' ||
+      error?.code === 'auth/invalid-credential' ||
+      error?.code === 'auth/email-already-in-use' ||
+      error?.code === 'auth/too-many-requests'
+    ) {
+      console.warn("Email Login notice:", error?.message || error?.code);
+      throw error;
+    }
     console.error("Email Login Error:", error);
     throw error;
   }
@@ -168,6 +205,36 @@ export async function logoutUser() {
 }
 
 // Save User Profile to Firestore (with localStorage sync)
+export async function clearAllUserDataFromFirestore(userId: string) {
+  try {
+    try {
+      localStorage.clear();
+    } catch (e) {}
+
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    for (const d of days) {
+      try {
+        await withTimeout(deleteDoc(doc(db, 'users', userId, 'plans', d)), 4000);
+      } catch (e) {}
+    }
+
+    try {
+      const chatSnap = await withTimeout(getDocs(collection(db, 'users', userId, 'chat')), 4000);
+      for (const chatDoc of chatSnap.docs) {
+        try {
+          await withTimeout(deleteDoc(chatDoc.ref), 2000);
+        } catch (e) {}
+      }
+    } catch (e) {}
+
+    try {
+      await withTimeout(deleteDoc(doc(db, 'users', userId)), 6000);
+    } catch (e) {}
+  } catch (err) {
+    console.debug("Firestore profile delete error or offline fallback", err);
+  }
+}
+
 export async function saveProfileToFirestore(userId: string, profile: UserProfile) {
   const docPath = `users/${userId}`;
   try {
@@ -184,7 +251,6 @@ export async function saveProfileToFirestore(userId: string, profile: UserProfil
 
 // Get User Profile from Firestore (with localStorage fallback)
 export async function getProfileFromFirestore(userId: string): Promise<UserProfile | null> {
-  const docPath = `users/${userId}`;
   try {
     const snap = await withTimeout(getDoc(doc(db, 'users', userId)), 6000);
     if (snap.exists()) {
@@ -192,21 +258,19 @@ export async function getProfileFromFirestore(userId: string): Promise<UserProfi
       localStorage.setItem(`kaicoach_profile_${userId}`, JSON.stringify(data));
       localStorage.setItem('kai_coach_profile', JSON.stringify(data));
       return data;
+    } else {
+      localStorage.removeItem(`kaicoach_profile_${userId}`);
+      localStorage.removeItem('kai_coach_profile');
+      return null;
     }
   } catch (err) {
-    console.debug("Firestore profile fetch using local cache fallback");
-  }
-
-  // Fallback to localStorage
-  try {
-    const cached = localStorage.getItem(`kaicoach_profile_${userId}`) || localStorage.getItem('kai_coach_profile');
-    if (cached) {
-      const data = JSON.parse(cached) as UserProfile;
-      localStorage.setItem('kai_coach_profile', JSON.stringify(data));
-      return data;
-    }
-  } catch (localErr) {
-    console.error("Local profile cache read failed:", localErr);
+    console.debug("Firestore profile fetch using local cache fallback", err);
+    try {
+      const cached = localStorage.getItem(`kaicoach_profile_${userId}`) || localStorage.getItem('kai_coach_profile');
+      if (cached) {
+        return JSON.parse(cached) as UserProfile;
+      }
+    } catch (localErr) {}
   }
   return null;
 }
@@ -227,25 +291,26 @@ export async function savePlanToFirestore(userId: string, dayName: string, plan:
 
 // Get Daily Plan from Firestore
 export async function getPlanFromFirestore(userId: string, dayName: string): Promise<DailyPlan | null> {
-  const docPath = `users/${userId}/plans/${dayName}`;
   try {
     const snap = await withTimeout(getDoc(doc(db, 'users', userId, 'plans', dayName)), 6000);
     if (snap.exists()) {
       const data = snap.data() as DailyPlan;
       localStorage.setItem(`kaicoach_plan_${userId}_${dayName}`, JSON.stringify(data));
       return data;
+    } else {
+      localStorage.removeItem(`kaicoach_plan_${userId}_${dayName}`);
+      return null;
     }
   } catch (err) {
-    console.debug("Firestore plan fetch using local cache fallback");
-  }
-
-  try {
-    const cached = localStorage.getItem(`kaicoach_plan_${userId}_${dayName}`);
-    if (cached) {
-      return JSON.parse(cached) as DailyPlan;
+    console.debug("Firestore plan fetch using local cache fallback", err);
+    try {
+      const cached = localStorage.getItem(`kaicoach_plan_${userId}_${dayName}`);
+      if (cached) {
+        return JSON.parse(cached) as DailyPlan;
+      }
+    } catch (localErr) {
+      console.error("Local plan cache read failed:", localErr);
     }
-  } catch (localErr) {
-    console.error("Local plan cache read failed:", localErr);
   }
   return null;
 }
@@ -286,7 +351,6 @@ export async function saveChatMessageToFirestore(userId: string, message: { send
 
 // Get Chat Messages from Firestore
 export async function getChatHistoryFromFirestore(userId: string) {
-  const path = `users/${userId}/chat`;
   try {
     const q = query(collection(db, 'users', userId, 'chat'), orderBy('timestamp', 'asc'), limit(50));
     const snap = await withTimeout(getDocs(q), 6000);
@@ -303,16 +367,18 @@ export async function getChatHistoryFromFirestore(userId: string) {
       });
       localStorage.setItem(`kaicoach_chat_${userId}`, JSON.stringify(msgs));
       return msgs;
+    } else {
+      localStorage.removeItem(`kaicoach_chat_${userId}`);
+      return [];
     }
   } catch (err) {
-    console.debug("Firestore chat fetch using local cache fallback");
+    console.debug("Firestore chat fetch using local cache fallback", err);
+    try {
+      const cached = localStorage.getItem(`kaicoach_chat_${userId}`);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (localErr) {}
   }
-
-  try {
-    const cached = localStorage.getItem(`kaicoach_chat_${userId}`);
-    if (cached) {
-      return JSON.parse(cached);
-    }
-  } catch (localErr) {}
   return [];
 }

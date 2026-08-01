@@ -337,14 +337,19 @@ export default function Dashboard({
   const [addingFoodId, setAddingFoodId] = useState<string | number | null>(null);
   const [selectedMealCategory, setSelectedMealCategory] = useState<'Breakfast' | 'Lunch' | 'Dinner' | 'Snack'>('Breakfast');
 
+  // Search Filter States
+  const [selectedEquipmentFilter, setSelectedEquipmentFilter] = useState<string>('all');
+  const [selectedNutrientFilter, setSelectedNutrientFilter] = useState<string>('all');
+
   // Trigger search on mode change or query
-  const searchWgerExercises = async (term: string) => {
+  const searchWgerExercises = async (term: string, equipFilter: string = selectedEquipmentFilter) => {
     setLoadingDb(true);
     setDbError(null);
     try {
       const locationQuery = encodeURIComponent(profile?.workoutLocation || 'both');
       const experienceQueryStr = encodeURIComponent(profile?.experienceLevel || 'intermediate');
-      const res = await fetch(`/api/wger/exercises?term=${encodeURIComponent(term)}&location=${locationQuery}&experience=${experienceQueryStr}`);
+      const equipQuery = encodeURIComponent(equipFilter);
+      const res = await fetch(`/api/wger/exercises?term=${encodeURIComponent(term)}&location=${locationQuery}&experience=${experienceQueryStr}&equipment=${equipQuery}`);
       if (!res.ok) throw new Error("Could not retrieve exercises from server proxy.");
       const data = await res.json();
       setExercises(data);
@@ -355,11 +360,12 @@ export default function Dashboard({
     }
   };
 
-  const searchOpenFoodFacts = async (term: string) => {
+  const searchOpenFoodFacts = async (term: string, nutFilter: string = selectedNutrientFilter) => {
     setLoadingDb(true);
     setDbError(null);
     try {
-      const res = await fetch(`/api/openfoodfacts/foods?term=${encodeURIComponent(term)}`);
+      const nutQuery = encodeURIComponent(nutFilter === 'all' ? '' : nutFilter);
+      const res = await fetch(`/api/openfoodfacts/foods?term=${encodeURIComponent(term)}&nutrient=${nutQuery}`);
       if (!res.ok) throw new Error("Could not retrieve nutrition entries from server proxy.");
       const data = await res.json();
       setFoods(data);
@@ -372,9 +378,9 @@ export default function Dashboard({
 
   useEffect(() => {
     if (dbMode === 'exercises') {
-      searchWgerExercises(exerciseQuery);
+      searchWgerExercises(exerciseQuery, selectedEquipmentFilter);
     } else if (dbMode === 'foods') {
-      searchOpenFoodFacts(foodQuery);
+      searchOpenFoodFacts(foodQuery, selectedNutrientFilter);
     }
   }, [dbMode]);
 
@@ -1134,33 +1140,67 @@ export default function Dashboard({
                       type="text"
                       value={exerciseQuery}
                       onChange={(e) => setExerciseQuery(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') searchWgerExercises(exerciseQuery); }}
-                      placeholder="Search over 400+ proper body exercises (e.g. Chest, Biceps, Press, Squat)..."
+                      onKeyDown={(e) => { if (e.key === 'Enter') searchWgerExercises(exerciseQuery, selectedEquipmentFilter); }}
+                      placeholder="Search Kai's exercise database (100+ per muscle group, e.g. Chest, Biceps, Press, Squat)..."
                       className="w-full bg-slate-950 border border-slate-800 focus:border-sky-500/60 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500/20 transition-all"
                     />
                   </div>
                   <button
                     type="button"
-                    onClick={() => searchWgerExercises(exerciseQuery)}
+                    onClick={() => searchWgerExercises(exerciseQuery, selectedEquipmentFilter)}
                     className="bg-sky-500 hover:bg-sky-600 active:scale-95 text-slate-950 font-black px-6 py-3.5 rounded-2xl text-xs uppercase tracking-wider shadow-md shadow-sky-500/5 transition cursor-pointer shrink-0"
                   >
-                    Search AI
+                    Search Engine
                   </button>
+                </div>
+
+                {/* Equipment Filter Bar */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider mr-1">Equipment:</span>
+                  {[
+                    { label: 'All Equipment', val: 'all' },
+                    { label: '🏋️ Barbell', val: 'barbell' },
+                    { label: '💪 Dumbbell', val: 'dumbbell' },
+                    { label: '🔌 Cable', val: 'cable' },
+                    { label: '🧱 Machine', val: 'machine' },
+                    { label: '🤸 Bodyweight', val: 'bodyweight' },
+                    { label: '🔔 Kettlebell', val: 'kettlebell' },
+                  ].map((eq) => {
+                    const isSelected = selectedEquipmentFilter === eq.val;
+                    return (
+                      <button
+                        key={eq.val}
+                        type="button"
+                        onClick={() => {
+                          setSelectedEquipmentFilter(eq.val);
+                          searchWgerExercises(exerciseQuery, eq.val);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-amber-400 text-slate-950 shadow-sm'
+                            : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        {eq.label}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* Quick Muscle Category Filter Pills */}
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider mr-1">Filter Muscle Group:</span>
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider mr-1">Muscle Group:</span>
                   {[
-                    { label: 'All', query: '' },
+                    { label: 'All Muscles', query: '' },
                     { label: '🏋️ Chest', query: 'Chest' },
                     { label: '🚣 Back', query: 'Back' },
                     { label: '💪 Biceps', query: 'Biceps' },
                     { label: '⚡ Triceps', query: 'Triceps' },
-                    { label: '🔥 Abs', query: 'Abs' },
-                    { label: '🦵 Legs', query: 'Legs' },
                     { label: '🎯 Shoulders', query: 'Shoulders' },
+                    { label: '🦵 Legs', query: 'Legs' },
+                    { label: '🔥 Abs & Core', query: 'Abs' },
                     { label: '✊ Forearms', query: 'Forearms' },
+                    { label: '🏃 Cardio & HIIT', query: 'Cardio' },
                   ].map((pill) => {
                     const isCurrent = exerciseQuery.toLowerCase().trim() === pill.query.toLowerCase().trim();
                     return (
@@ -1169,7 +1209,7 @@ export default function Dashboard({
                         type="button"
                         onClick={() => {
                           setExerciseQuery(pill.query);
-                          searchWgerExercises(pill.query);
+                          searchWgerExercises(pill.query, selectedEquipmentFilter);
                         }}
                         className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
                           isCurrent
@@ -1184,25 +1224,63 @@ export default function Dashboard({
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                  <Search className="absolute left-4 top-3.5 w-4.5 h-4.5 text-slate-500" />
-                  <input
-                    type="text"
-                    value={foodQuery}
-                    onChange={(e) => setFoodQuery(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') searchOpenFoodFacts(foodQuery); }}
-                    placeholder="Search Open Food Facts database for high protein items (e.g. Salmon, Whey, Yogurt)..."
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-sky-500/60 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500/20 transition-all"
-                  />
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-4 top-3.5 w-4.5 h-4.5 text-slate-500" />
+                    <input
+                      type="text"
+                      value={foodQuery}
+                      onChange={(e) => setFoodQuery(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') searchOpenFoodFacts(foodQuery, selectedNutrientFilter); }}
+                      placeholder="Search Open Food Facts database (e.g. Salmon, Whey, Spinach, Tofu, Oats)..."
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-sky-500/60 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500/20 transition-all"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => searchOpenFoodFacts(foodQuery, selectedNutrientFilter)}
+                    className="bg-sky-500 hover:bg-sky-600 active:scale-95 text-slate-950 font-black px-6 py-3.5 rounded-2xl text-xs uppercase tracking-wider shadow-md shadow-sky-500/5 transition cursor-pointer"
+                  >
+                    Search Foods
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => searchOpenFoodFacts(foodQuery)}
-                  className="bg-sky-500 hover:bg-sky-600 active:scale-95 text-slate-950 font-black px-6 py-3.5 rounded-2xl text-xs uppercase tracking-wider shadow-md shadow-sky-500/5 transition cursor-pointer"
-                >
-                  Search Food Facts
-                </button>
+
+                {/* Nutrient Richness Index Filter Pills */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[10px] font-black uppercase text-emerald-400 tracking-wider mr-1">Rich In Nutrient:</span>
+                  {[
+                    { label: 'All Nutrients', val: 'all' },
+                    { label: '🥩 High Protein', val: 'protein' },
+                    { label: '🌾 Fiber Rich', val: 'fiber' },
+                    { label: '🥑 Healthy Fats / Ω3', val: 'fats' },
+                    { label: '🩸 Iron Rich', val: 'iron' },
+                    { label: '🦴 High Calcium', val: 'calcium' },
+                    { label: '⚡ Potassium Boost', val: 'potassium' },
+                    { label: '🧠 Zinc & Mag', val: 'magnesium' },
+                    { label: '🍊 Vitamin C / D', val: 'vitaminc' },
+                    { label: '🔥 Low Calorie', val: 'lowcal' },
+                  ].map((nut) => {
+                    const isSelected = selectedNutrientFilter === nut.val;
+                    return (
+                      <button
+                        key={nut.val}
+                        type="button"
+                        onClick={() => {
+                          setSelectedNutrientFilter(nut.val);
+                          searchOpenFoodFacts(foodQuery, nut.val);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-400 text-slate-950 border-emerald-300 shadow-md shadow-emerald-400/10'
+                            : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
+                        }`}
+                      >
+                        {nut.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -1225,7 +1303,7 @@ export default function Dashboard({
                 {dbMode === 'exercises' ? (
                   exercises.length === 0 ? (
                     <div className="text-center py-10 bg-slate-950/20 border border-slate-800/40 rounded-2xl">
-                      <p className="text-xs text-slate-500 uppercase font-black tracking-wider">No matching exercises. Try searching "Press", "Curl", or "Squat"!</p>
+                      <p className="text-xs text-slate-500 uppercase font-black tracking-wider">No matching exercises found in this filter category. Try clearing equipment filters!</p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
@@ -1241,9 +1319,16 @@ export default function Dashboard({
                                 <span>{ex.name}</span>
                                 <Sparkles className="w-3.5 h-3.5 text-sky-500/60 group-hover:text-sky-400 transition" />
                               </button>
-                              <span className="text-[9px] font-black tracking-wider uppercase bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 text-sky-400 rounded-lg shrink-0">
-                                {ex.category}
-                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {ex.equipment && (
+                                  <span className="text-[8px] font-black tracking-wider uppercase bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-amber-300 rounded-lg">
+                                    {ex.equipment}
+                                  </span>
+                                )}
+                                <span className="text-[8px] font-black tracking-wider uppercase bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 text-sky-400 rounded-lg">
+                                  {ex.category}
+                                </span>
+                              </div>
                             </div>
                             
                             {ex.muscles && ex.muscles.length > 0 && (
@@ -1350,7 +1435,7 @@ export default function Dashboard({
                 ) : (
                   foods.length === 0 ? (
                     <div className="text-center py-10 bg-slate-950/20 border border-slate-800/40 rounded-2xl">
-                      <p className="text-xs text-slate-500 uppercase font-black tracking-wider">No matching foods. Try searching "Salmon", "Egg Whites", or "Tofu"!</p>
+                      <p className="text-xs text-slate-500 uppercase font-black tracking-wider">No matching foods in this nutrient category. Try clearing nutrient filters!</p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
@@ -1358,9 +1443,9 @@ export default function Dashboard({
                         const isHighProtein = food.protein >= 12;
                         return (
                           <div key={food.id} className="bg-slate-950 border border-slate-800/80 hover:border-slate-700/80 p-4.5 rounded-2xl flex flex-col justify-between gap-4 transition relative overflow-hidden group">
-                            {isHighProtein && (
+                            {food.keyNutrient && (
                               <span className="absolute top-2.5 right-2.5 text-[8px] font-black bg-emerald-500 text-slate-950 px-2.5 py-0.5 rounded-full uppercase tracking-widest z-10 shadow-lg">
-                                High Protein
+                                {food.keyNutrient}
                               </span>
                             )}
 
@@ -1374,7 +1459,7 @@ export default function Dashboard({
                                 />
                               ) : (
                                 <div className="w-16 h-16 rounded-xl bg-slate-900 border border-slate-800 shrink-0 self-center flex items-center justify-center text-slate-600">
-                                  <Utensils className="w-6 h-6" />
+                                  <Utensils className="w-6 h-6 text-emerald-400" />
                                 </div>
                               )}
                               
@@ -1385,6 +1470,17 @@ export default function Dashboard({
                                 <p className="text-[10px] text-slate-500 font-bold uppercase truncate mt-0.5">
                                   {food.brand || "Generic Brand"}
                                 </p>
+
+                                {/* Highlights / Badges */}
+                                {food.highlights && food.highlights.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {food.highlights.map((h: string, idx: number) => (
+                                      <span key={idx} className="text-[7.5px] font-bold bg-slate-900 text-slate-300 border border-slate-800 px-1.5 py-0.5 rounded-md uppercase">
+                                        {h}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
 
                                 {/* Nutrition Stats Grid */}
                                 <div className="grid grid-cols-4 gap-1.5 mt-2 text-center text-[9px] font-mono font-bold">
