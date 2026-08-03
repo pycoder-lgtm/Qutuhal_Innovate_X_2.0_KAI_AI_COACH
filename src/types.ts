@@ -34,11 +34,13 @@ export interface UserProfile {
   injuriesOrConditions: string;
   focusAesthetic: ('muscular_buff_frame' | 'fat_loss_lean_figure')[];
   physiquePhoto?: string; // Base64 data URL (legacy or main front photo)
+  rotationVideo?: string; // Base64 data URL for 360 rotation video
   photoFront?: string; // Base64 Front Photo
   photoLeft?: string; // Base64 Left Side Photo
   photoRight?: string; // Base64 Right Side Photo
   photoBack?: string; // Base64 Back Photo
-  predictedWeightRange?: string; // e.g. "72 - 78 kg"
+  calculated_weight_kg?: number; // Single estimated weight baseline integer in kg (e.g. 84)
+  predictedWeightRange?: string; // e.g. "72 - 78 kg" (kept for chat context)
   predictedHeightRange?: string; // e.g. "173 - 178 cm"
   valid_full_body?: boolean;
   rejection_reason?: string | null;

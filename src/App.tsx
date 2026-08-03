@@ -10,6 +10,7 @@ import CoachChat from './components/CoachChat';
 import MetricsTracker from './components/MetricsTracker';
 import AchievementsTab from './components/AchievementsTab';
 import { UserProfile, DailyPlan, ProgressLog, ChatMessage } from './types';
+import { InstallPrompt } from './components/InstallPrompt';
 import { detectUserLocation } from './utils/location';
 import { 
   Dumbbell, MessageSquare, LineChart, UserCog, Sparkles, 
@@ -679,8 +680,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 flex flex-col">
-      {/* Upper Navigation Bar */}
-      <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 shadow-lg">
+      {/* Upper Navigation Bar with Mobile Safe Area */}
+      <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 shadow-lg pt-safe">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="bg-sky-500 p-2.5 rounded-lg text-slate-950 shadow-md flex items-center justify-center">
@@ -890,18 +891,18 @@ export default function App() {
                   </div>
                   <div className="space-y-1">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">
-                      {profile.predictedHeightRange ? "Estimated Height Range" : "Height"}
+                      Height
                     </span>
                     <span className="text-sm font-semibold text-white">
-                      {profile.predictedHeightRange || `${profile.height} cm`}
+                      {profile.height ? `${profile.height} cm` : "175 cm"}
                     </span>
                   </div>
                   <div className="space-y-1">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">
-                      {profile.predictedWeightRange ? "Estimated Weight Range" : "Weight"}
+                      Estimated Weight Baseline
                     </span>
                     <span className="text-sm font-semibold text-white">
-                      {profile.predictedWeightRange || `${profile.weight} kg`}
+                      {profile.calculated_weight_kg ? `${profile.calculated_weight_kg} kg` : profile.weight ? `${profile.weight} kg` : "84 kg"}
                     </span>
                   </div>
                   {profile.targetWeight && (
@@ -991,12 +992,12 @@ export default function App() {
                           return (
                             <div key={item.key} className="bg-slate-900 border border-slate-850 rounded-xl p-2 flex flex-col items-center">
                               <span className="text-[9px] uppercase font-bold text-slate-400 mb-1.5 block tracking-wide">{item.label}</span>
-                              <div className="w-full h-[120px] overflow-hidden rounded-lg flex items-center justify-center bg-slate-950 border border-slate-900">
+                              <div className="w-full h-[200px] sm:h-[240px] overflow-hidden rounded-lg flex items-center justify-center bg-slate-950 border border-slate-900 p-1">
                                 {src ? (
                                   <img 
                                     src={src} 
                                     alt={item.label} 
-                                    className="h-full w-full object-cover"
+                                    className="h-full w-full object-contain p-1 bg-slate-950 rounded-lg"
                                     referrerPolicy="no-referrer"
                                   />
                                 ) : (
@@ -1007,6 +1008,8 @@ export default function App() {
                           );
                         })}
                       </div>
+                    </div>
+                  )}
 
                       <div className="space-y-3 pt-2 border-t border-slate-900">
                         <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1055,10 +1058,8 @@ export default function App() {
                         )}
                       </div>
                     </div>
-                  )}
-                </div>
 
-                <div className="pt-4 border-t border-slate-800 space-y-4">
+                    <div className="pt-4 border-t border-slate-800 space-y-4">
                   <div className="bg-slate-950 p-4.5 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                       <div className="p-2.5 bg-sky-500/10 text-sky-400 rounded-xl border border-sky-500/20 shrink-0">
@@ -1176,8 +1177,11 @@ export default function App() {
         </div>
       )}
 
+      {/* PWA / Native Install Banner */}
+      <InstallPrompt />
+
       {/* Styled Footer */}
-      <footer className="bg-slate-900 border-t border-slate-800 py-6 mt-12 shrink-0">
+      <footer className="bg-slate-900 border-t border-slate-800 py-6 pb-safe mt-12 shrink-0">
         <div className="max-w-7xl mx-auto px-6 text-center space-y-1.5">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 font-display">Powered by Gemini 3.5 & Google AI Studio</p>
           <p className="text-[11px] text-slate-400/80">Strictly adhere to your customized macronutrients. Consult a physician before embarking on heavy physical exercise schedules.</p>

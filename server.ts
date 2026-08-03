@@ -40,7 +40,7 @@ async function generateContentWithRetry(params: any, maxRetries = 3, initialDela
   let delayMs = initialDelayMs;
   
   // Rotating models upon reaching daily quotas on gemini models
-  const fallbackModels = ["gemini-3.6-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+  const fallbackModels = ["gemini-2.5-flash", "gemini-3.6-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-flash-latest"];
   let currentModelIndex = params.model ? fallbackModels.indexOf(params.model) : 0;
   if (currentModelIndex === -1) {
     currentModelIndex = 0;
@@ -1288,11 +1288,37 @@ function getFallbackWeeklyProposal(profile: any) {
   };
 }
 
+/**
+ * MATHEMATICAL CALCULATION PROTOCOL FOR KAI AI COACH:
+ * STEP 1: Biological Frame Classification ('male' or 'female')
+ * STEP 2: Devine Formula Ideal Body Weight (IBW) Baseline Calculation based on measured_height_cm
+ *   - Male (for height >= 152.4 cm): IBW = 50 + (0.91 * (measured_height_cm - 152.4))
+ *   - Female (for height >= 152.4 cm): IBW = 45.5 + (0.91 * (measured_height_cm - 152.4))
+ *   - (If height < 152.4 cm, default IBW = 45.5 kg for male, 40.0 kg for female).
+ * STEP 3: Clothing & Fabric Neutralization Protocol & Tissue Density Modifier (Cm) Evaluation (0.80 to 1.80)
+ * STEP 4: Calculated_Weight_Kg = Math.round(IBW * Cm)
+ */
+function calculateDevineAnthropometricWeight(gender: string, heightCm: number, cmFactor: number = 1.00): number {
+  const isMale = (gender || "").toLowerCase().includes("male") && !(gender || "").toLowerCase().includes("female");
+  let ibw = 0;
+  if (heightCm >= 152.4) {
+    if (isMale) {
+      ibw = 50 + (0.91 * (heightCm - 152.4));
+    } else {
+      ibw = 45.5 + (0.91 * (heightCm - 152.4));
+    }
+  } else {
+    ibw = isMale ? 45.5 : 40.0;
+  }
+  const calculatedWeight = ibw * cmFactor;
+  return Math.round(calculatedWeight);
+}
+
 function computeProfileSmartDefaults(profile: any) {
-  const weight = Number(profile?.weight) || 75;
   const height = Number(profile?.height) || 175;
-  const age = Number(profile?.age) || 25;
   const gender = profile?.gender || 'male';
+  const weight = Number(profile?.weight) || calculateDevineAnthropometricWeight(gender, height, 1.00);
+  const age = Number(profile?.age) || 25;
   const activityLevel = profile?.activityLevel || 'moderate';
   const goals = profile?.goals || (profile?.goal ? [profile.goal] : ['fat_loss_muscle_gain']);
   const injuries = profile?.injuriesOrConditions || 'None';
@@ -1606,11 +1632,121 @@ CRITICAL FIT-GOAL SPLIT MANDATES (Target Day of the Week: ${dayOfWeek || 'not sp
   }
 });
 
+// Endpoint: KAI AI COACH Multimodal Anthropometric Weight Calculation Protocol
+app.post("/api/calculate-baseline-weight", async (req: express.Request, res: express.Response) => {
+  try {
+    const { user_name, user_age, measured_height_cm, mediapipe_metrics, photoFront, photoBack, photoLeft, photoRight, gender } = req.body;
+    
+    const userName = user_name || "User";
+    const userAge = user_age || 25;
+    const heightCm = Number(measured_height_cm) || 175;
+
+    const imagesToAnalyze: { label: string; base64: string }[] = [];
+    if (photoFront) imagesToAnalyze.push({ label: "Front Profile", base64: photoFront });
+    if (photoLeft) imagesToAnalyze.push({ label: "Left Profile", base64: photoLeft });
+    if (photoBack) imagesToAnalyze.push({ label: "Back Profile", base64: photoBack });
+    if (photoRight) imagesToAnalyze.push({ label: "Right Profile", base64: photoRight });
+
+    let parts: any[] = [];
+    const textPrompt = `User Scan Metadata & Parameters:
+- user_name: "${userName}"
+- user_age: ${userAge}
+- measured_height_cm: ${heightCm}
+- mediapipe_metrics: ${JSON.stringify(mediapipe_metrics || { shoulderToHipRatio: 1.2, profileDepthRatio: 0.85 })}
+
+Please process the 4 uploaded full-body posture photos (Front, Left Profile, Back, Right Profile) with the above parameters to calculate baseline weight in kg.`;
+
+    parts.push({ text: textPrompt });
+    for (const img of imagesToAnalyze) {
+      if (typeof img.base64 === "string" && img.base64.startsWith("data:")) {
+        const matches = img.base64.match(/^data:([^;]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          parts.push({ inlineData: { mimeType: matches[1], data: matches[2] } });
+        }
+      }
+    }
+
+    const systemInstruction = `You are "Coach Kai", an elite AI computer vision engine and biometrics expert. Your goal is to analyze 4 body posture photos (FRONT, BACK, LEFT SIDE, RIGHT SIDE) alongside a user's measured height to calculate precise body mass (kg), somatotype, and posture analysis.
+
+--------------------------------------------------
+1. CLOTHING & FABRIC NEUTRALIZATION PROTOCOL
+--------------------------------------------------
+Users may wear loose, dark, oversized, or baggy clothing. DO NOT rely on outer clothing silhouettes.
+- UNCOVERED ANATOMICAL ANCHORS:
+  1. Facial & Neck Density: Assess jawline thickness, neck circumference, and double-chin presence.
+  2. Joint & Bone Scale: Compare wrist, forearm, and ankle width against height to determine frame thickness.
+  3. Profile Drape Depth: Evaluate fabric tension across the abdomen in LEFT/RIGHT profile views to infer core volume under loose cloth.
+
+--------------------------------------------------
+2. DENSITY MODIFIER (Cm) & WEIGHT EQUATION
+--------------------------------------------------
+- Base Math: Calculate Ideal Body Weight (IBW) from height:
+  - Male: 50 + (0.91 * (measured_height_cm - 152.4))
+  - Female: 45.5 + (0.91 * (measured_height_cm - 152.4))
+- Tissue Density Modifier (Cm): Allow Cm to scale dynamically from 0.80 (lean/thin) up to 1.80 (heavy/high fat/high muscle).
+- Calculated_Weight = IBW * Cm (Round to nearest integer).
+
+HIGH-MASS OVERRIDE RULE:
+If BOTH conditions are met:
+1. Side profile view shows abdominal protrusion extending past the chest line.
+2. Facial/neck tissue indicates heavy fat storage or broad neck-to-shoulder mass.
+THEN: Instantly scale Cm into the 1.45 - 1.70 range to accurately hit 100 kg - 125+ kg, regardless of dark or loose clothing.
+
+--------------------------------------------------
+3. SOMATOTYPE & POSTURE RULES
+--------------------------------------------------
+- SOMATOTYPE OVERRIDE: Do NOT classify a user as "Mesomorph" based solely on broad frontal shoulders. You MUST cross-reference side profile photos. If abdominal depth exceeds chest depth, classify as "Endomorph".
+- POSTURE SCAN: Identify forward head posture, shoulder rounding, or anterior pelvic tilt from the side and back profiles.
+
+--------------------------------------------------
+4. STRICT OUTPUT INSTRUCTIONS
+--------------------------------------------------
+- Return strictly valid JSON with \`user_name\` and \`calculated_weight_kg\`.
+- All weight values MUST be integer numbers. NEVER output ranges (e.g. DO NOT output '82-88 kg').
+- Do not output body fat %, height, or BMI in this payload.`;
+
+    try {
+      const response = await generateContentWithRetry({
+        model: "gemini-2.5-flash",
+        contents: [{ role: "user", parts }],
+        config: {
+          temperature: 0.0,
+          systemInstruction,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              user_name: { type: Type.STRING },
+              calculated_weight_kg: { type: Type.INTEGER }
+            },
+            required: ["user_name", "calculated_weight_kg"]
+          }
+        }
+      });
+
+      const parsed = JSON.parse(response.text.trim());
+      return res.json({
+        user_name: parsed.user_name || userName,
+        calculated_weight_kg: Math.round(Number(parsed.calculated_weight_kg)) || 84
+      });
+    } catch (aiErr) {
+      const bioFrame = (gender || "").toLowerCase().includes("female") ? "female" : "male";
+      const calcWeight = calculateDevineAnthropometricWeight(bioFrame, heightCm, 1.00);
+      return res.json({
+        user_name: userName,
+        calculated_weight_kg: calcWeight
+      });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || "Failed to calculate anthropometric baseline weight." });
+  }
+});
+
 // Endpoint to analyze physique photo
 app.post("/api/analyze-physique", validateAtLeastOneField(["photoFront", "photoLeft", "photoRight", "photoBack", "image"], "At least one physique photo is required for analysis."), async (req: express.Request, res: express.Response) => {
   let timeoutId: any = null;
   try {
-    const { photoFront, photoLeft, photoRight, photoBack, image, name, age } = req.body;
+    const { photoFront, photoLeft, photoRight, photoBack, image, name, user_name, age, user_age } = req.body;
     
     const imagesToAnalyze: { label: string; base64: string }[] = [];
     if (photoFront) imagesToAnalyze.push({ label: "Front View", base64: photoFront });
@@ -1625,10 +1761,10 @@ app.post("/api/analyze-physique", validateAtLeastOneField(["photoFront", "photoL
 
     let parts: any[] = [];
     
-    const userName = name || "Aesthetic Warrior";
-    const userAge = age || 25;
+    const userName = user_name || name || "Aesthetic Warrior";
+    const userAge = user_age || age || 25;
     
-    let textPrompt = `You are conducting an in-depth professional posture and 360-degree aesthetic frame assessment for user ${userName} who is ${userAge} years old. You have been provided with ${imagesToAnalyze.length} photo(s) representing different angles of their body.
+    let textPrompt = `You are conducting an in-depth professional posture and 4-angle aesthetic frame assessment for user ${userName} who is ${userAge} years old. You have been provided with ${imagesToAnalyze.length} photo(s) representing different angles of their body (Front, Left Side, Right Side, Back Angle).
 
 The provided photos are:
 `;
@@ -1646,32 +1782,33 @@ The provided photos are:
 3. IF the full body is visible from head to toe:
    - Set "valid_full_body": true
    - Set "rejection_reason": null (or empty string)
-   - Execute full posture assessment according to the guidelines below.
+   - Execute full posture assessment across Front, Left Side, Right Side, and Back photos.
 
 POSTURE ANALYSIS GUIDELINES (When valid_full_body is true):
 - Assess alignment across: Head/Neck, Shoulders, Pelvis/Spine, and Knees/Ankles.
 - Identify common deviations (e.g., Forward Head Posture, Anterior Pelvic Tilt, Shoulder Elevation, Knee Valgus).
-- Map identified deviations directly to exercise modifications (e.g., replace heavy lumbar-loading lifts with supported alternatives).
+- Map identified deviations directly to exercise modifications.
+- Perform internal frame density calculations silently and return a single integer estimated weight baseline in kg ("calculated_weight_kg").
 
 Provide:
-1. "valid_full_body": boolean
-2. "rejection_reason": string or null
-3. "postureAssessment": object with:
+1. "user_name": "${userName}"
+2. "calculated_weight_kg": Single integer estimated baseline weight in kg (e.g., 84). Perform internal frame density calculations silently.
+3. "valid_full_body": boolean
+4. "rejection_reason": string or null
+5. "postureAssessment": object with:
    - "headNeck": alignment analysis & deviations
    - "shoulders": alignment analysis & deviations
    - "pelvisSpine": alignment analysis & deviations
    - "kneesAnkles": alignment analysis & deviations
    - "identifiedDeviations": array of specific deviation strings
    - "exerciseModifications": array of direct exercise modification mapping strings
-4. "analysis": Executive 360-degree frame and posture summary report.
-5. "frameType": Skeletal frame archetype (e.g., "V-Taper Athletic Mesomorph").
-6. "frontAngleReport": Detailed front view observations.
-7. "sideAngleReport": Detailed side view observations (posture, spinal curve, pelvic tilt).
-8. "backAngleReport": Detailed back view observations (lats, traps, scapulae).
-9. "predictedWeightRange": Estimated weight range in kg (e.g. "72 - 78 kg"). DO NOT state an exact single weight, provide an estimated weight range.
-10. "predictedHeightRange": Estimated height range in cm (e.g. "172 - 177 cm"). DO NOT state an exact single height, provide an estimated height range.
-11. "predictedWeight": Numerical midpoint weight in kg (for internal macros).
-12. "predictedHeight": Numerical midpoint height in cm (for internal macros).
+6. "analysis": Executive aesthetic frame and posture summary report.
+7. "frameType": Skeletal frame archetype (e.g., "V-Taper Athletic Mesomorph").
+8. "frontAngleReport": Detailed front view observations.
+9. "sideAngleReport": Detailed side view observations (posture, spinal curve, pelvic tilt).
+10. "backAngleReport": Detailed back view observations (lats, traps, scapulae).
+11. "predictedWeight": Numerical calculated weight in kg.
+12. "predictedHeight": Numerical estimated height in cm.
 13. "estimatedBodyFatPercent": Estimated body fat percentage.
 14. "bmr": Basal Metabolic Rate in kcal.
 15. "tdee": Total Daily Energy Expenditure in kcal.
@@ -1696,7 +1833,7 @@ Provide:
       }
     }
 
-    // Set a 45-second timeout for the AI model API call to prevent HTTP request timeouts while giving multi-image analysis ample time to finish
+    // Set a 45-second timeout for the AI model API call
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId = setTimeout(() => reject(new Error("Gemini API call timed out after 45000ms")), 45000);
     });
@@ -1706,127 +1843,108 @@ Provide:
         model: "gemini-3.1-pro-preview",
         contents: [{ role: "user", parts: parts }],
         config: {
+          temperature: 0.0,
           thinkingConfig: {
             thinkingBudget: 2048
           },
-          systemInstruction: "You are Coach Kai, an elite certified sports scientist, posture specialist, biomechanist, and head coach. You use deep multimodal reasoning to analyze user posture images. First, verify full-body visibility from head to toe. If head, hips, or feet are cropped out, mark valid_full_body as false and provide a rejection_reason. If full body is visible, execute a complete posture assessment across Head/Neck, Shoulders, Pelvis/Spine, and Knees/Ankles, identifying deviations and mapping them directly to exercise modifications. CRITICAL REQUIREMENT: Do NOT state an actual exact weight or actual exact height. Instead, output the estimated weight range (e.g. '72 - 78 kg') and estimated height range (e.g. '173 - 178 cm').",
+          systemInstruction: `You are "Coach Kai", an elite AI computer vision engine and biometrics expert. Your goal is to analyze 4 body posture photos (FRONT, BACK, LEFT SIDE, RIGHT SIDE) alongside a user's measured height to calculate precise body mass (kg), somatotype, and posture analysis.
+
+--------------------------------------------------
+1. CLOTHING & FABRIC NEUTRALIZATION PROTOCOL
+--------------------------------------------------
+Users may wear loose, dark, oversized, or baggy clothing. DO NOT rely on outer clothing silhouettes.
+- UNCOVERED ANATOMICAL ANCHORS:
+  1. Facial & Neck Density: Assess jawline thickness, neck circumference, and double-chin presence.
+  2. Joint & Bone Scale: Compare wrist, forearm, and ankle width against height to determine frame thickness.
+  3. Profile Drape Depth: Evaluate fabric tension across the abdomen in LEFT/RIGHT profile views to infer core volume under loose cloth.
+
+--------------------------------------------------
+2. DENSITY MODIFIER (Cm) & WEIGHT EQUATION
+--------------------------------------------------
+- Base Math: Calculate Ideal Body Weight (IBW) from height, then apply Tissue Density Modifier (Cm).
+  Calculated_Weight = IBW * Cm
+- Cm Range: Allow Cm to scale dynamically from 0.80 (lean/thin) up to 1.80 (heavy/high fat/high muscle).
+
+HIGH-MASS OVERRIDE RULE:
+If BOTH conditions are met:
+1. Side profile view shows abdominal protrusion extending past the chest line.
+2. Facial/neck tissue indicates heavy fat storage or broad neck-to-shoulder mass.
+THEN: Instantly scale Cm into the 1.45 - 1.70 range to accurately hit 100 kg - 125+ kg, regardless of dark or loose clothing.
+
+--------------------------------------------------
+3. SOMATOTYPE & POSTURE RULES
+--------------------------------------------------
+- SOMATOTYPE OVERRIDE: Do NOT classify a user as "Mesomorph" based solely on broad frontal shoulders. You MUST cross-reference side profile photos. If abdominal depth exceeds chest depth, classify as "Endomorph".
+- POSTURE SCAN: Identify forward head posture, shoulder rounding, or anterior pelvic tilt from the side and back profiles.
+
+--------------------------------------------------
+4. STRICT OUTPUT INSTRUCTIONS
+--------------------------------------------------
+- Return ONLY valid JSON matching the defined schema.
+- All weight values MUST be integer numbers. Perform internal frame density calculations silently and return calculated_weight_kg.
+- Keep posture summaries concise, direct, and actionable.`,
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
+              user_name: { type: Type.STRING },
+              calculated_weight_kg: { type: Type.INTEGER, description: "Single calculated integer weight baseline in kg" },
               valid_full_body: {
                 type: Type.BOOLEAN,
                 description: "True if subject is fully visible from head to toe; false if head, hips, or feet are cropped out."
               },
               rejection_reason: {
                 type: Type.STRING,
-                description: "Reason if valid_full_body is false (e.g., 'Head, hips, or feet are cropped out in photo'). Null/empty if valid_full_body is true."
+                description: "Reason if valid_full_body is false. Null/empty if valid_full_body is true."
               },
               postureAssessment: {
                 type: Type.OBJECT,
                 properties: {
-                  headNeck: {
-                    type: Type.STRING,
-                    description: "Alignment assessment for head and neck (e.g. cervical spine curve, forward head posture)."
-                  },
-                  shoulders: {
-                    type: Type.STRING,
-                    description: "Alignment assessment for shoulders (e.g. elevation, protraction, asymmetry)."
-                  },
-                  pelvisSpine: {
-                    type: Type.STRING,
-                    description: "Alignment assessment for pelvis and spine (e.g. anterior pelvic tilt, lumbar lordosis, thoracic curvature)."
-                  },
-                  kneesAnkles: {
-                    type: Type.STRING,
-                    description: "Alignment assessment for knees and ankles (e.g. knee valgus, ankle pronation)."
-                  },
+                  headNeck: { type: Type.STRING },
+                  shoulders: { type: Type.STRING },
+                  pelvisSpine: { type: Type.STRING },
+                  kneesAnkles: { type: Type.STRING },
                   identifiedDeviations: {
                     type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                    description: "List of identified posture deviations (e.g. Forward Head Posture, Anterior Pelvic Tilt, Shoulder Elevation, Knee Valgus)."
+                    items: { type: Type.STRING }
                   },
                   exerciseModifications: {
                     type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                    description: "Direct mapping of identified deviations to exercise modifications (e.g. replace heavy lumbar-loading lifts with supported alternatives)."
+                    items: { type: Type.STRING }
                   }
                 },
                 required: ["headNeck", "shoulders", "pelvisSpine", "kneesAnkles", "identifiedDeviations", "exerciseModifications"]
               },
-              analysis: {
-                type: Type.STRING,
-                description: "Comprehensive 360-degree aesthetic frame report and body composition assessment."
-              },
-              frameType: {
-                type: Type.STRING,
-                description: "Skeletal frame & body type archetype name"
-              },
-              frontAngleReport: {
-                type: Type.STRING,
-                description: "Detailed Front angle assessment (shoulders, chest, V-taper, waist)"
-              },
-              sideAngleReport: {
-                type: Type.STRING,
-                description: "Detailed Side angle assessment (posture, spinal curve, pelvic tilt)"
-              },
-              backAngleReport: {
-                type: Type.STRING,
-                description: "Detailed Back angle assessment (lats, traps, posterior chain symmetry)"
-              },
-              predictedWeightRange: {
-                type: Type.STRING,
-                description: "Estimated weight range in kilograms (e.g. '72 - 78 kg'). Do NOT provide a single exact weight."
-              },
-              predictedHeightRange: {
-                type: Type.STRING,
-                description: "Estimated height range in centimeters (e.g. '173 - 178 cm'). Do NOT provide a single exact height."
-              },
-              predictedWeight: {
-                type: Type.INTEGER,
-                description: "Estimated weight midpoint integer in kg (e.g. 75)."
-              },
-              predictedHeight: {
-                type: Type.INTEGER,
-                description: "Estimated height midpoint integer in cm (e.g. 175)."
-              },
-              estimatedBodyFatPercent: {
-                type: Type.INTEGER,
-                description: "Estimated body fat percentage (e.g. 18)."
-              },
-              bmr: {
-                type: Type.INTEGER,
-                description: "Estimated Basal Metabolic Rate in kcal (e.g. 1750)."
-              },
-              tdee: {
-                type: Type.INTEGER,
-                description: "Estimated Total Daily Energy Expenditure in kcal (e.g. 2400)."
-              },
+              analysis: { type: Type.STRING },
+              frameType: { type: Type.STRING },
+              frontAngleReport: { type: Type.STRING },
+              sideAngleReport: { type: Type.STRING },
+              backAngleReport: { type: Type.STRING },
+              predictedWeight: { type: Type.INTEGER },
+              predictedHeight: { type: Type.INTEGER },
+              estimatedBodyFatPercent: { type: Type.INTEGER },
+              bmr: { type: Type.INTEGER },
+              tdee: { type: Type.INTEGER },
               recommendedMacros: {
                 type: Type.OBJECT,
                 properties: {
-                  protein: { type: Type.INTEGER, description: "Daily protein target in grams" },
-                  carbs: { type: Type.INTEGER, description: "Daily carbs target in grams" },
-                  fat: { type: Type.INTEGER, description: "Daily fat target in grams" }
+                  protein: { type: Type.INTEGER },
+                  carbs: { type: Type.INTEGER },
+                  fat: { type: Type.INTEGER }
                 },
                 required: ["protein", "carbs", "fat"]
               },
               biomechanicalAlerts: {
                 type: Type.ARRAY,
-                items: { type: Type.STRING },
-                description: "1-3 specific biomechanical/injury cautions based on frame"
+                items: { type: Type.STRING }
               },
-              aestheticPotential: {
-                type: Type.STRING,
-                description: "A 1-line title for their physical transformation blueprint"
-              },
+              aestheticPotential: { type: Type.STRING },
               coachDirectives: {
                 type: Type.ARRAY,
-                items: { type: Type.STRING },
-                description: "3 key actionable training/nutrition habits"
+                items: { type: Type.STRING }
               }
             },
-            required: ["valid_full_body", "rejection_reason", "postureAssessment", "analysis", "frameType", "frontAngleReport", "sideAngleReport", "backAngleReport", "predictedWeightRange", "predictedHeightRange", "predictedWeight", "predictedHeight", "estimatedBodyFatPercent", "bmr", "tdee", "recommendedMacros", "biomechanicalAlerts", "aestheticPotential", "coachDirectives"]
+            required: ["user_name", "calculated_weight_kg", "valid_full_body", "rejection_reason", "postureAssessment", "analysis", "frameType", "frontAngleReport", "sideAngleReport", "backAngleReport", "predictedWeight", "predictedHeight", "estimatedBodyFatPercent", "bmr", "tdee", "recommendedMacros", "biomechanicalAlerts", "aestheticPotential", "coachDirectives"]
           }
         }
       }),

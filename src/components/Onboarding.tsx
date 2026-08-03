@@ -3,13 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile } from '../types';
 import { 
   User, Scale, Activity, Target, Utensils, ArrowRight, ArrowLeft, 
   Sparkles, Dumbbell, ShieldAlert, HeartHandshake, Eye, Camera, X, RefreshCw, AlertCircle,
-  Database, LogIn, LogOut, CheckCircle2, ShieldCheck, Cloud
+  Database, LogIn, LogOut, CheckCircle2, ShieldCheck, Cloud, Video, Play, Square, Upload, Film
 } from 'lucide-react';
 import { auth, signInWithGoogle, logoutUser, getProfileFromFirestore, saveProfileToFirestore, registerWithEmail, loginWithEmail, ensureAuthenticatedUser } from '../firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -19,7 +19,94 @@ interface OnboardingProps {
   initialProfile?: UserProfile | null;
 }
 
-function compressImage(file: File, maxWidth = 640, maxHeight = 640, quality = 0.65): Promise<string> {
+export async function extractKeyframesFromVideo(
+  videoSource: File | Blob | string
+): Promise<{ photoFront: string; photoLeft: string; photoBack: string; photoRight: string }> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'auto';
+    video.muted = true;
+    video.playsInline = true;
+
+    let objectUrl = '';
+    if (typeof videoSource === 'string') {
+      video.src = videoSource;
+    } else {
+      objectUrl = URL.createObjectURL(videoSource);
+      video.src = objectUrl;
+    }
+
+    video.onloadedmetadata = async () => {
+      try {
+        const duration = video.duration && !isNaN(video.duration) && video.duration > 0 ? video.duration : 4;
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        const targetWidth = 720;
+        const targetHeight = 1280;
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        // Keyframe timestamps: Front 0°, Left 90°, Back 180°, Right 270°
+        const timestamps = [
+          Math.min(0.2, duration * 0.05),
+          duration * 0.28,
+          duration * 0.53,
+          duration * 0.78,
+        ];
+
+        const keyframeImages: string[] = [];
+
+        for (const ts of timestamps) {
+          await new Promise<void>((seekResolve) => {
+            const onSeeked = () => {
+              video.removeEventListener('seeked', onSeeked);
+              if (ctx) {
+                ctx.fillStyle = '#020617';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const vWidth = video.videoWidth || targetWidth;
+                const vHeight = video.videoHeight || targetHeight;
+                const scale = Math.min(targetWidth / vWidth, targetHeight / vHeight);
+                const drawWidth = vWidth * scale;
+                const drawHeight = vHeight * scale;
+                const offsetX = (targetWidth - drawWidth) / 2;
+                const offsetY = (targetHeight - drawHeight) / 2;
+
+                ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
+                keyframeImages.push(canvas.toDataURL('image/jpeg', 0.85));
+              } else {
+                keyframeImages.push('');
+              }
+              seekResolve();
+            };
+            video.addEventListener('seeked', onSeeked);
+            video.currentTime = Math.min(ts, duration - 0.1);
+          });
+        }
+
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+
+        resolve({
+          photoFront: keyframeImages[0] || '',
+          photoLeft: keyframeImages[1] || '',
+          photoBack: keyframeImages[2] || '',
+          photoRight: keyframeImages[3] || '',
+        });
+      } catch (err) {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        reject(err);
+      }
+    };
+
+    video.onerror = () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      reject(new Error('Failed to load video file for 360° rotation keyframe extraction.'));
+    };
+  });
+}
+
+function compressImage(file: File, maxWidth = 800, maxHeight = 1200, quality = 0.70): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -66,7 +153,7 @@ function compressImage(file: File, maxWidth = 640, maxHeight = 640, quality = 0.
 
 const steps = [
   { id: 'auth', title: 'Account Registration & Login', icon: LogIn, description: 'Check if you are registered or sign up with Google / Firebase' },
-  { id: 'basics', title: 'Bio Details & 4 Photos', icon: User, description: 'Personal metrics and mandatory 4-view physique portfolio' },
+  { id: 'basics', title: 'Bio Details & Physique Portfolio', icon: User, description: 'Personal metrics and mandatory 4-view physique portfolio' },
   { id: 'prediction', title: 'Aesthetic Frame Prediction', icon: Camera, description: 'AI evaluates body frame baseline & posture structure' },
   { id: 'goals', title: 'Aesthetic Goals & Diet', icon: Target, description: 'Target look, dietary preferences & fitness experience' },
 ];
@@ -348,6 +435,141 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
       setCloudSyncMsg(`Load failed: ${err.message || 'Error loading from database'}`);
     } finally {
       setCloudLoading(false);
+    }
+  };
+
+  // Live Camera Video Recording & Video Scan states
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingCountdown, setRecordingCountdown] = useState(5);
+  const [processingVideo, setProcessingVideo] = useState(false);
+  const [showManualPhotos, setShowManualPhotos] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoFileInputRef = useRef<HTMLInputElement>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const videoChunksRef = useRef<Blob[]>([]);
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1080 }, height: { ideal: 1920 } },
+        audio: false
+      });
+      mediaStreamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setIsCameraActive(true);
+    } catch (err) {
+      console.error("Camera access error:", err);
+      alert("Could not access camera device. Please use the 'Select Video File' button to choose your 360° rotation video.");
+    }
+  };
+
+  const stopCamera = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+    setIsCameraActive(false);
+    setIsRecording(false);
+  };
+
+  const startRecordingVideo = () => {
+    if (!mediaStreamRef.current) return;
+    videoChunksRef.current = [];
+
+    try {
+      const recorder = new MediaRecorder(mediaStreamRef.current, { mimeType: 'video/webm' });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) videoChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        setProcessingVideo(true);
+        const blob = new Blob(videoChunksRef.current, { type: 'video/webm' });
+        stopCamera();
+
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = async () => {
+          const videoDataUrl = reader.result as string;
+          updateField('rotationVideo', videoDataUrl);
+
+          try {
+            const keyframes = await extractKeyframesFromVideo(blob);
+            updateField('photoFront', keyframes.photoFront);
+            updateField('photoLeft', keyframes.photoLeft);
+            updateField('photoBack', keyframes.photoBack);
+            updateField('photoRight', keyframes.photoRight);
+            updateField('physiquePhoto', keyframes.photoFront);
+            updateField('valid_full_body', undefined);
+            updateField('rejection_reason', undefined);
+            updateField('physiqueAnalysis', undefined);
+          } catch (err) {
+            console.error("Failed to extract keyframes from recorded video:", err);
+          } finally {
+            setProcessingVideo(false);
+          }
+        };
+      };
+
+      recorder.start(200);
+      setIsRecording(true);
+      setRecordingCountdown(5);
+
+      let timeLeft = 5;
+      const timer = setInterval(() => {
+        timeLeft -= 1;
+        setRecordingCountdown(timeLeft);
+        if (timeLeft <= 0) {
+          clearInterval(timer);
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+          }
+        }
+      }, 1000);
+    } catch (err) {
+      console.error("MediaRecorder start error:", err);
+      alert("Recording failed. Please try selecting a video file directly via the File Button.");
+    }
+  };
+
+  const handleVideoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setProcessingVideo(true);
+
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const videoDataUrl = reader.result as string;
+        updateField('rotationVideo', videoDataUrl);
+
+        try {
+          const keyframes = await extractKeyframesFromVideo(file);
+          updateField('photoFront', keyframes.photoFront);
+          updateField('photoLeft', keyframes.photoLeft);
+          updateField('photoBack', keyframes.photoBack);
+          updateField('photoRight', keyframes.photoRight);
+          updateField('physiquePhoto', keyframes.photoFront);
+          updateField('valid_full_body', undefined);
+          updateField('rejection_reason', undefined);
+          updateField('physiqueAnalysis', undefined);
+        } catch (err) {
+          console.error("Video keyframe extraction error:", err);
+          alert("Could not process video keyframes. Please make sure it is a valid 360° standing rotation video file.");
+        } finally {
+          setProcessingVideo(false);
+        }
+      };
+    } catch (err) {
+      console.error("Video file reading error:", err);
+      setProcessingVideo(false);
     }
   };
 
@@ -680,11 +902,13 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                     />
                     {errors.age && <p className="text-red-400 text-xs mt-1">{errors.age}</p>}
                   </div>
-                </div>                <div className="space-y-4">
+                </div>                {/* 4-Angle Photo Portfolio Upload Grid */}
+                <div className="space-y-4">
                   <div>
                     <div className="flex items-center justify-between gap-2">
-                      <label className="block text-sm font-bold text-slate-300 uppercase tracking-wide">
-                        Upload Physique Portfolio (All 4 Views Mandatory)
+                      <label className="block text-sm font-bold text-slate-300 uppercase tracking-wide flex items-center gap-2">
+                        <Camera className="w-4 h-4 text-sky-400" />
+                        <span>Upload Physique Portfolio (All 4 Views Mandatory)</span>
                       </label>
                       <div className="flex items-center gap-1.5 text-[11px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-1 rounded-full">
                         <Database className="w-3.5 h-3.5" />
@@ -692,22 +916,41 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                       </div>
                     </div>
                     <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                      For Coach Kai to construct a comprehensive aesthetic posture profile and accurately predict your frame structure, please upload or capture views of your body. <strong>All Front, Left, Right, and Back views are now strictly mandatory</strong> to enable high-fidelity 360-degree calibration.
+                      For Coach Kai to construct a comprehensive aesthetic posture profile and accurately predict your frame structure, please upload or capture views of your body. <strong>All Front, Left, Right, and Back views are strictly mandatory</strong> to enable high-fidelity 360-degree calibration.
                     </p>
+                    <div className="mt-2.5 p-2.5 bg-amber-500/10 border border-amber-500/25 rounded-xl text-amber-300 text-[11px] font-semibold flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                      <span><strong>CRITICAL:</strong> Please provide a <u>FULL-BODY photo from head to toe</u>. Photos that crop out the head, hips, or feet are not suitable for posture calibration.</span>
+                    </div>
+
+                    {/* REJECTION WARNING BANNER */}
+                    {formData.valid_full_body === false && (
+                      <div className="mt-3 p-3.5 bg-red-950/80 border-2 border-red-500/80 rounded-2xl text-red-200 text-xs font-bold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xl animate-bounce">
+                        <div className="flex items-center gap-2.5">
+                          <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+                          <div>
+                            <p className="text-red-300 font-extrabold uppercase tracking-wide text-xs">Photo is not suitable!</p>
+                            <p className="text-red-200/90 text-[11px] mt-0.5 font-medium">
+                              {formData.rejection_reason || 'Please give the full body of the person from head to toe. Photos cropping head, hips, or feet cannot be analyzed.'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {[
-                      { key: 'photoFront' as const, label: 'Front Photo', required: true, desc: 'Face forward, hands by sides' },
-                      { key: 'photoLeft' as const, label: 'Left Profile', required: true, desc: 'Left side profile' },
-                      { key: 'photoRight' as const, label: 'Right Profile', required: true, desc: 'Right side profile' },
-                      { key: 'photoBack' as const, label: 'Back Photo', required: true, desc: 'Posterior chain & spine' }
+                      { key: 'photoFront' as const, label: 'Front Photo', required: true, desc: 'Full standing body, head to feet, facing camera' },
+                      { key: 'photoLeft' as const, label: 'Left Profile', required: true, desc: 'Full standing left side profile, head to feet' },
+                      { key: 'photoRight' as const, label: 'Right Profile', required: true, desc: 'Full standing right side profile, head to feet' },
+                      { key: 'photoBack' as const, label: 'Back Photo', required: true, desc: 'Full standing posterior view, head to feet' }
                     ].map((item) => {
                       const photoUrl = formData[item.key];
                       return (
                         <div 
                           key={item.key}
-                          className={`border rounded-2xl bg-slate-950 p-3.5 flex flex-col justify-between min-h-[185px] relative transition hover:border-slate-700 ${
+                          className={`border rounded-2xl bg-slate-950 p-3.5 flex flex-col justify-between min-h-[300px] sm:min-h-[350px] relative transition hover:border-slate-700 ${
                             item.required ? 'border-sky-500/40 shadow-[0_0_15px_rgba(14,165,233,0.05)]' : 'border-slate-800'
                           }`}
                         >
@@ -718,45 +961,47 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                                 ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' 
                                 : 'bg-slate-900 text-slate-500 border border-slate-800'
                             }`}>
-                              {item.required ? 'Mandatory' : 'Optional'}
+                              {item.required ? 'Mandatory Full Body' : 'Optional'}
                             </span>
                           </div>
 
                           {photoUrl ? (
-                            <div className="relative w-full h-[110px] bg-slate-900 rounded-xl overflow-hidden flex items-center justify-center border border-slate-800 mt-4">
+                            <div className="relative w-full h-[220px] sm:h-[260px] bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border border-slate-800 mt-4 p-1">
                               <img 
                                 src={photoUrl} 
                                 alt={item.label} 
-                                className="h-full w-full object-cover"
+                                className="h-full w-full object-contain p-1 bg-slate-950 rounded-lg"
                                 referrerPolicy="no-referrer"
                               />
                               <button
                                 type="button"
                                 onClick={() => {
                                   updateField(item.key, undefined);
-                                  // Clear corresponding physique photo if it was photoFront
                                   if (item.key === 'photoFront') {
                                     updateField('physiquePhoto', undefined);
                                   }
+                                  updateField('valid_full_body', undefined);
+                                  updateField('rejection_reason', undefined);
                                 }}
-                                className="absolute top-1.5 right-1.5 bg-red-500/85 hover:bg-red-600 text-white p-1 rounded-full shadow-lg transition cursor-pointer"
+                                className="absolute top-2 right-2 bg-red-500/85 hover:bg-red-600 text-white p-1.5 rounded-full shadow-lg transition cursor-pointer z-20"
+                                title="Remove photo"
                               >
-                                <X className="w-3.5 h-3.5" />
+                                <X className="w-4 h-4" />
                               </button>
                             </div>
                           ) : (
                             <label
                               htmlFor={`camera-input-${item.key}`}
-                              className="flex-1 flex flex-col items-center justify-center text-center space-y-1.5 py-4 mt-2 cursor-pointer hover:bg-slate-900/60 rounded-xl transition group border border-dashed border-slate-800 hover:border-sky-500/30"
+                              className="flex-1 flex flex-col items-center justify-center text-center space-y-2 py-6 mt-4 cursor-pointer hover:bg-slate-900/60 rounded-xl transition group border border-dashed border-slate-800 hover:border-sky-500/30"
                               title="Tap to take picture directly with camera"
                             >
-                              <div className="p-2 bg-slate-900 group-hover:bg-sky-500/10 rounded-full text-sky-400 group-hover:text-sky-300 transition-colors">
-                                <Camera className="w-4 h-4" />
+                              <div className="p-3 bg-slate-900 group-hover:bg-sky-500/10 rounded-full text-sky-400 group-hover:text-sky-300 transition-colors">
+                                <Camera className="w-6 h-6" />
                               </div>
                               <span className="text-xs font-black text-slate-300 group-hover:text-white uppercase tracking-tight transition-colors">{item.label}</span>
-                              <span className="text-[9px] text-slate-500 leading-tight font-medium max-w-[120px]">{item.desc}</span>
-                              <span className="text-[8px] bg-sky-500/10 text-sky-400 border border-sky-500/20 font-extrabold uppercase px-1.5 py-0.5 rounded mt-1.5 tracking-wider animate-pulse">
-                                Tap to Camera
+                              <span className="text-[10px] text-slate-400 leading-tight font-medium max-w-[150px]">{item.desc}</span>
+                              <span className="text-[8px] bg-sky-500/10 text-sky-400 border border-sky-500/20 font-extrabold uppercase px-2 py-1 rounded mt-1.5 tracking-wider animate-pulse">
+                                Tap for Full-Body Shot
                               </span>
                             </label>
                           )}
@@ -844,7 +1089,7 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                     Evaluate Your Current Aesthetic Frame
                   </h3>
                   <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-                    Coach Kai's AI engine will process your photo below to predict your structural frame type, current silhouette attributes, and postural orientation.
+                    Coach Kai's AI engine will process your 4 photos below to predict your structural frame type, current silhouette attributes, and postural orientation.
                   </p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -859,12 +1104,12 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                         ].map((item) => (
                           <div key={item.key} className="bg-slate-900/60 rounded-xl p-1.5 border border-slate-850 flex flex-col items-center">
                             <span className="text-[9px] uppercase font-black text-slate-500 mb-1 block tracking-wider">{item.label}</span>
-                            <div className="w-full h-[64px] overflow-hidden rounded-lg flex items-center justify-center bg-slate-950 border border-slate-900">
+                            <div className="w-full h-[150px] sm:h-[180px] overflow-hidden rounded-lg flex items-center justify-center bg-slate-950 border border-slate-900 p-1">
                               {formData[item.key] ? (
                                 <img 
                                   src={formData[item.key]} 
                                   alt={item.label} 
-                                  className="h-full w-full object-cover"
+                                  className="h-full w-full object-contain p-1 bg-slate-950 rounded-lg"
                                   referrerPolicy="no-referrer"
                                 />
                               ) : (
@@ -892,7 +1137,11 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                                   photoRight: formData.photoRight,
                                   photoBack: formData.photoBack,
                                   name: formData.name,
+                                  user_name: formData.name,
                                   age: formData.age,
+                                  user_age: formData.age,
+                                  measured_height_cm: formData.height || 175,
+                                  mediapipe_metrics: { shoulderToHipRatio: 1.2, profileDepthRatio: 0.85 },
                                   gender: formData.gender,
                                   activityLevel: formData.activityLevel,
                                   goals: formData.goals,
@@ -909,9 +1158,11 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                               if (data.frontAngleReport) updateField('frontAngleReport', data.frontAngleReport);
                               if (data.sideAngleReport) updateField('sideAngleReport', data.sideAngleReport);
                               if (data.backAngleReport) updateField('backAngleReport', data.backAngleReport);
-                              if (data.predictedWeightRange) updateField('predictedWeightRange', data.predictedWeightRange);
-                              if (data.predictedHeightRange) updateField('predictedHeightRange', data.predictedHeightRange);
-                              if (data.predictedWeight) {
+                              if (data.calculated_weight_kg) {
+                                updateField('calculated_weight_kg', data.calculated_weight_kg);
+                                updateField('weight', data.calculated_weight_kg);
+                              } else if (data.predictedWeight) {
+                                updateField('calculated_weight_kg', data.predictedWeight);
                                 updateField('weight', data.predictedWeight);
                               }
                               if (data.predictedHeight) {
@@ -970,34 +1221,31 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                               </div>
                             )}
 
-                            <div className="grid grid-cols-2 gap-3 bg-slate-900/40 p-3 rounded-xl border border-sky-500/20">
-                              <div className="text-center">
-                                <span className="text-[10px] uppercase font-extrabold text-sky-400 block mb-1">Estimated Weight Range</span>
-                                <span className="text-sm font-black text-white font-mono block py-1.5 bg-slate-950 rounded-lg border border-slate-800">
-                                  {formData.predictedWeightRange || (formData.weight ? `${Math.max(40, formData.weight - 3)} - ${formData.weight + 3} kg` : "70 - 76 kg")}
-                                </span>
-                              </div>
-                              <div className="text-center">
-                                <span className="text-[10px] uppercase font-extrabold text-sky-400 block mb-1">Estimated Height Range</span>
-                                <span className="text-sm font-black text-white font-mono block py-1.5 bg-slate-950 rounded-lg border border-slate-800">
-                                  {formData.predictedHeightRange || (formData.height ? `${Math.max(140, formData.height - 3)} - ${formData.height + 3} cm` : "172 - 178 cm")}
-                                </span>
-                              </div>
+                            <div className="bg-slate-900/80 p-4 rounded-xl border border-sky-500/30 text-center space-y-1">
+                              <span className="text-[10px] uppercase font-extrabold text-sky-400 tracking-wider block">Estimated Weight Baseline</span>
+                              <span className="text-2xl font-black text-white font-mono block">
+                                {formData.calculated_weight_kg ? `${formData.calculated_weight_kg} kg` : formData.weight ? `${formData.weight} kg` : "84 kg"}
+                              </span>
                             </div>
-                            <p className="text-[9px] text-slate-400 text-center italic">
-                              💡 Multimodal 360° AI vision maps posture alignment and frame density to estimate your baseline metrics.
-                            </p>
 
                             {/* Full-Body Validation Notice */}
                             {formData.valid_full_body === false && (
-                              <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-rose-300 text-xs space-y-1">
-                                <div className="font-bold flex items-center gap-1.5 text-rose-400">
-                                  <AlertCircle className="w-4 h-4 shrink-0" />
-                                  Full-Body Image Required
+                              <div className="bg-rose-500/10 border border-rose-500/40 rounded-2xl p-4 text-rose-300 text-xs space-y-2.5">
+                                <div className="font-extrabold flex items-center gap-2 text-rose-400 uppercase tracking-wide text-xs">
+                                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                                  Photo Not Suitable — Full Body Required
                                 </div>
-                                <p className="text-[11px] leading-relaxed text-slate-300">
-                                  {formData.rejection_reason || "The subject is not fully visible from head to toe (ears/head top to feet/soles). Please upload a complete full-body photo for accurate posture analysis."}
+                                <p className="text-[11px] leading-relaxed text-slate-200">
+                                  {formData.rejection_reason || "The photo provided does not show the full body from head to feet. Please upload a full-body standing photo showing head to toe so Coach Kai can accurately calibrate your posture and frame."}
                                 </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setCurrentStep(1)}
+                                  className="mt-1 bg-rose-500 hover:bg-rose-600 active:scale-95 text-slate-950 font-black text-[10px] uppercase tracking-wider px-4 py-2 rounded-xl transition cursor-pointer shadow-md shadow-rose-500/20 flex items-center gap-1.5"
+                                >
+                                  <Camera className="w-3.5 h-3.5" />
+                                  Re-upload Full Body Photos
+                                </button>
                               </div>
                             )}
 
@@ -1039,11 +1287,11 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                             )}
 
                             <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-line bg-slate-900/50 p-3.5 rounded-xl border border-slate-900/40 shadow-inner">
-                              <span className="font-bold text-sky-400 block mb-1 uppercase tracking-wider text-[10px]">Executive 360° Summary</span>
+                              <span className="font-bold text-sky-400 block mb-1 uppercase tracking-wider text-[10px]">Executive Summary</span>
                               {formData.physiqueAnalysis}
                             </div>
 
-                            {/* 360° View Breakdown Cards */}
+                            {/* 4-Angle Multi-Angle Analysis */}
                             {(formData.frontAngleReport || formData.sideAngleReport || formData.backAngleReport) && (
                               <div className="space-y-2 pt-1">
                                 <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400">4-Photo Multi-Angle Analysis</div>
@@ -1074,23 +1322,6 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                                     <p className="text-slate-300 text-[11px] leading-relaxed">{formData.backAngleReport}</p>
                                   </div>
                                 )}
-                              </div>
-                            )}
-
-                            {(formData.bmr || formData.tdee || formData.recommendedMacros) && (
-                              <div className="grid grid-cols-3 gap-2 text-center pt-1">
-                                <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800/80">
-                                  <div className="text-[9px] uppercase font-bold text-slate-400">BMR</div>
-                                  <div className="text-xs font-black text-teal-400">{formData.bmr || 1700} <span className="text-[9px] font-normal text-slate-400">kcal</span></div>
-                                </div>
-                                <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800/80">
-                                  <div className="text-[9px] uppercase font-bold text-slate-400">TDEE</div>
-                                  <div className="text-xs font-black text-sky-400">{formData.tdee || 2300} <span className="text-[9px] font-normal text-slate-400">kcal</span></div>
-                                </div>
-                                <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800/80">
-                                  <div className="text-[9px] uppercase font-bold text-slate-400">Est. Fat</div>
-                                  <div className="text-xs font-black text-amber-400">~{formData.estimatedBodyFatPercent || 18}%</div>
-                                </div>
                               </div>
                             )}
                           </div>
