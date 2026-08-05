@@ -204,34 +204,60 @@ export async function logoutUser() {
   }
 }
 
-// Save User Profile to Firestore (with localStorage sync)
-export async function clearAllUserDataFromFirestore(userId: string) {
+// Clear All User Data From Firestore completely
+export async function clearAllUserDataFromFirestore(userId: string, email?: string) {
   try {
     try {
       localStorage.clear();
+      sessionStorage.clear();
     } catch (e) {}
 
-    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    for (const d of days) {
-      try {
-        await withTimeout(deleteDoc(doc(db, 'users', userId, 'plans', d)), 4000);
-      } catch (e) {}
+    const targetIds = new Set<string>();
+    if (userId) targetIds.add(userId);
+    if (email) {
+      const cleanId = btoa(email.toLowerCase().trim()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 28);
+      targetIds.add(`user_${cleanId}`);
+      targetIds.add(email.toLowerCase().trim());
     }
 
-    try {
-      const chatSnap = await withTimeout(getDocs(collection(db, 'users', userId, 'chat')), 4000);
-      for (const chatDoc of chatSnap.docs) {
+    for (const id of Array.from(targetIds)) {
+      if (!id) continue;
+
+      // Delete plans subcollection documents
+      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      for (const d of days) {
         try {
-          await withTimeout(deleteDoc(chatDoc.ref), 2000);
+          await deleteDoc(doc(db, 'users', id, 'plans', d));
         } catch (e) {}
       }
-    } catch (e) {}
 
-    try {
-      await withTimeout(deleteDoc(doc(db, 'users', userId)), 6000);
-    } catch (e) {}
+      // Delete chat subcollection documents
+      try {
+        const chatSnap = await getDocs(collection(db, 'users', id, 'chat'));
+        for (const chatDoc of chatSnap.docs) {
+          try {
+            await deleteDoc(chatDoc.ref);
+          } catch (e) {}
+        }
+      } catch (e) {}
+
+      // Delete any other subcollections if found (e.g. metrics, logs)
+      try {
+        const plansSnap = await getDocs(collection(db, 'users', id, 'plans'));
+        for (const planDoc of plansSnap.docs) {
+          try {
+            await deleteDoc(planDoc.ref);
+          } catch (e) {}
+        }
+      } catch (e) {}
+
+      // Delete main root user document
+      try {
+        await deleteDoc(doc(db, 'users', id));
+      } catch (e) {}
+    }
   } catch (err) {
-    console.debug("Firestore profile delete error or offline fallback", err);
+    console.error("Firestore user data erase error:", err);
   }
 }
 

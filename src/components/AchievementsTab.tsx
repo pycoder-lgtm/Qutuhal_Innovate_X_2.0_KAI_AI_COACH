@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, DailyPlan, ProgressLog } from '../types';
 import {
   Trophy, Flame, Sparkles, Dumbbell, Droplet, Utensils, ShieldCheck,
   Award, Zap, Target, Star, Crown, Activity, Heart, Scale, Calendar,
   CheckCircle2, Lock, Plus, RefreshCw, Cpu, FastForward, Filter, Search,
-  ChevronRight, ArrowUpRight, Medal
+  ChevronRight, ChevronDown, ArrowUpRight, Medal
 } from 'lucide-react';
 
 interface AchievementsTabProps {
@@ -48,6 +49,8 @@ export default function AchievementsTab({ profile, plan, historyLogs = [] }: Ach
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<number | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedBadgeModal, setSelectedBadgeModal] = useState<AchievementItem | null>(null);
+  const [isEarnedOpen, setIsEarnedOpen] = useState<boolean>(true);
+  const [isRemainingOpen, setIsRemainingOpen] = useState<boolean>(false);
 
   // Sync to localStorage when updated
   useEffect(() => {
@@ -781,6 +784,87 @@ export default function AchievementsTab({ profile, plan, historyLogs = [] }: Ach
 
   const totalXP = allAchievements.reduce((acc, a) => acc + (a.unlocked ? a.rewardXP : 0), 0);
 
+  const earnedAchievements = filteredAchievements.filter(a => a.unlocked);
+  const remainingAchievements = filteredAchievements.filter(a => !a.unlocked);
+
+  const renderBadgeCard = (badge: AchievementItem) => {
+    const Icon = badge.icon;
+    const isUnlocked = badge.unlocked;
+
+    return (
+      <div
+        key={badge.id}
+        onClick={() => setSelectedBadgeModal(badge)}
+        className={`p-4 rounded-2xl border transition-all cursor-pointer relative flex flex-col justify-between space-y-4 group select-none ${
+          isUnlocked
+            ? 'bg-gradient-to-b from-slate-900 to-slate-950 border-amber-500/40 shadow-xl shadow-amber-500/5 hover:border-amber-400 hover:scale-[1.02]'
+            : 'bg-slate-950/60 border-slate-850 opacity-60 hover:opacity-90 hover:border-slate-700'
+        }`}
+      >
+        {/* Badge Header Row */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className={`p-3 rounded-2xl border transition ${
+              isUnlocked
+                ? 'bg-amber-500/15 border-amber-500/30 text-amber-400 shadow-md shadow-amber-500/10'
+                : 'bg-slate-900 border-slate-800 text-slate-600'
+            }`}>
+              <Icon className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 block font-mono">
+                WEEK {badge.weekTier} TIER
+              </span>
+              <h3 className={`text-sm font-black tracking-tight uppercase line-clamp-1 ${
+                isUnlocked ? 'text-white' : 'text-slate-400'
+              }`}>
+                {badge.title}
+              </h3>
+            </div>
+          </div>
+
+          {isUnlocked ? (
+            <span className="text-[9px] font-black uppercase text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full border border-emerald-500/20 flex items-center gap-1 shrink-0">
+              <CheckCircle2 className="w-3 h-3" />
+              Unlocked
+            </span>
+          ) : (
+            <span className="text-[9px] font-bold text-slate-500 bg-slate-900 px-2 py-1 rounded-full border border-slate-800 flex items-center gap-1 shrink-0">
+              <Lock className="w-3 h-3" />
+              Locked
+            </span>
+          )}
+        </div>
+
+        {/* Description */}
+        <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed min-h-[36px]">
+          {badge.description}
+        </p>
+
+        {/* Footer Progress & XP */}
+        <div className="space-y-2 pt-2 border-t border-slate-850">
+          <div className="flex items-center justify-between text-[10px] font-mono font-bold">
+            <span className="text-slate-400">{badge.progressText}</span>
+            <span className={isUnlocked ? 'text-amber-400' : 'text-slate-500'}>
+              +{badge.rewardXP} XP
+            </span>
+          </div>
+
+          <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
+            <div
+              className={`h-full transition-all duration-500 ${
+                isUnlocked
+                  ? 'bg-gradient-to-r from-amber-500 to-emerald-400'
+                  : 'bg-slate-800'
+              }`}
+              style={{ width: `${badge.percent}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-8 pb-12">
       {/* Top Banner & Milestones Header */}
@@ -1023,88 +1107,114 @@ export default function AchievementsTab({ profile, plan, historyLogs = [] }: Ach
         })}
       </div>
 
-      {/* Main Grid of 42 Achievements */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {filteredAchievements.map((badge) => {
-          const Icon = badge.icon;
-          const isUnlocked = badge.unlocked;
-
-          return (
-            <div
-              key={badge.id}
-              onClick={() => setSelectedBadgeModal(badge)}
-              className={`p-4 rounded-2xl border transition-all cursor-pointer relative flex flex-col justify-between space-y-4 group select-none ${
-                isUnlocked
-                  ? 'bg-gradient-to-b from-slate-900 to-slate-950 border-amber-500/40 shadow-xl shadow-amber-500/5 hover:border-amber-400 hover:scale-[1.02]'
-                  : 'bg-slate-950/60 border-slate-850 opacity-60 hover:opacity-90 hover:border-slate-700'
-              }`}
+      {/* Accordion Sections: Earned & Remaining Achievements */}
+      {filteredAchievements.length > 0 ? (
+        <div className="space-y-4">
+          {/* Card 1: Earned Achievements */}
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden shadow-xl transition-all">
+            <button
+              type="button"
+              onClick={() => setIsEarnedOpen(prev => !prev)}
+              className="w-full min-h-[48px] p-4 flex items-center justify-between text-left bg-neutral-900 hover:bg-neutral-850/80 cursor-pointer select-none transition-colors"
             >
-              {/* Badge Header Row */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className={`p-3 rounded-2xl border transition ${
-                    isUnlocked
-                      ? 'bg-amber-500/15 border-amber-500/30 text-amber-400 shadow-md shadow-amber-500/10'
-                      : 'bg-slate-900 border-slate-800 text-slate-600'
-                  }`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 block font-mono">
-                      WEEK {badge.weekTier} TIER
-                    </span>
-                    <h3 className={`text-sm font-black tracking-tight uppercase line-clamp-1 ${
-                      isUnlocked ? 'text-white' : 'text-slate-400'
-                    }`}>
-                      {badge.title}
-                    </h3>
-                  </div>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20">
+                  <Trophy className="w-5 h-5" />
                 </div>
-
-                {isUnlocked ? (
-                  <span className="text-[9px] font-black uppercase text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full border border-emerald-500/20 flex items-center gap-1 shrink-0">
-                    <CheckCircle2 className="w-3 h-3" />
-                    Unlocked
+                <div className="flex items-center gap-2.5">
+                  <h2 className="text-base md:text-lg font-black text-white uppercase tracking-tight font-display">
+                    Earned Achievements
+                  </h2>
+                  <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
+                    ({earnedAchievements.length})
                   </span>
-                ) : (
-                  <span className="text-[9px] font-bold text-slate-500 bg-slate-900 px-2 py-1 rounded-full border border-slate-800 flex items-center gap-1 shrink-0">
-                    <Lock className="w-3 h-3" />
-                    Locked
-                  </span>
-                )}
-              </div>
-
-              {/* Description */}
-              <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed min-h-[36px]">
-                {badge.description}
-              </p>
-
-              {/* Footer Progress & XP */}
-              <div className="space-y-2 pt-2 border-t border-slate-850">
-                <div className="flex items-center justify-between text-[10px] font-mono font-bold">
-                  <span className="text-slate-400">{badge.progressText}</span>
-                  <span className={isUnlocked ? 'text-amber-400' : 'text-slate-500'}>
-                    +{badge.rewardXP} XP
-                  </span>
-                </div>
-
-                <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
-                  <div
-                    className={`h-full transition-all duration-500 ${
-                      isUnlocked
-                        ? 'bg-gradient-to-r from-amber-500 to-emerald-400'
-                        : 'bg-slate-800'
-                    }`}
-                    style={{ width: `${badge.percent}%` }}
-                  />
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+              <ChevronDown
+                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
+                  isEarnedOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
 
-      {filteredAchievements.length === 0 && (
+            <AnimatePresence initial={false}>
+              {isEarnedOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  className="overflow-hidden border-t border-neutral-800/80"
+                >
+                  <div className="p-4 md:p-6 bg-slate-950/40">
+                    {earnedAchievements.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {earnedAchievements.map(badge => renderBadgeCard(badge))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-slate-500 text-xs font-medium">
+                        No earned achievements match the current filters.
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Card 2: Remaining Achievements */}
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden shadow-xl transition-all">
+            <button
+              type="button"
+              onClick={() => setIsRemainingOpen(prev => !prev)}
+              className="w-full min-h-[48px] p-4 flex items-center justify-between text-left bg-neutral-900 hover:bg-neutral-850/80 cursor-pointer select-none transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-slate-800 text-slate-400 rounded-xl border border-slate-700">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <h2 className="text-base md:text-lg font-black text-white uppercase tracking-tight font-display">
+                    Remaining Achievements
+                  </h2>
+                  <span className="text-xs font-mono font-bold text-slate-400 bg-slate-800/60 px-2.5 py-0.5 rounded-full border border-slate-700">
+                    ({remainingAchievements.length})
+                  </span>
+                </div>
+              </div>
+              <ChevronDown
+                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
+                  isRemainingOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            <AnimatePresence initial={false}>
+              {isRemainingOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  className="overflow-hidden border-t border-neutral-800/80"
+                >
+                  <div className="p-4 md:p-6 bg-slate-950/40">
+                    {remainingAchievements.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {remainingAchievements.map(badge => renderBadgeCard(badge))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-slate-500 text-xs font-medium">
+                        No remaining achievements match the current filters.
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      ) : (
         <div className="text-center py-16 bg-slate-900 border border-slate-800 rounded-3xl p-8 space-y-3">
           <Trophy className="w-12 h-12 text-slate-600 mx-auto" />
           <h3 className="text-lg font-bold text-white uppercase">No achievements found</h3>

@@ -177,3 +177,43 @@ export interface ChatMessage {
     }[];
   };
 }
+
+// Smartwatch Companion & Biometric Types
+export type WatchConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'simulated';
+export type HealthPermissionStatus = 'unprompted' | 'granted' | 'denied';
+
+export interface WearableBiometrics {
+  heartRate: number | null;
+  activeCalories: number;
+  stepCount: number;
+  exerciseZone: 'REST' | 'WARMUP' | 'MODERATE' | 'INTENSE';
+  targetMusicBpm: number;
+  lastSyncedAt: string;
+}
+
+export interface UserHealthMetrics {
+  stepCount: number;
+  heartRate: number | null;
+  sleepHours: number;
+  activeCalories: number;
+  connectedDeviceName: string;
+  lastSyncedAt: string;
+}
+
+export interface WatchDevice {
+  name: string; // 'Apple Watch', 'Galaxy Watch', 'Garmin', 'Simulated Watch'
+  platform: 'ios' | 'android' | 'mock';
+}
+
+export interface BodyScanAnalysis {
+  id: string;
+  date: string;
+  bodyFatEst: number;
+  postureScore: number;
+  postureNotes: string;
+  shoulderSymmetry: string;
+  pelvicTilt: string;
+  muscleHighlights: string[];
+  recommendations: string[];
+  rawAnalysisText?: string;
+}

@@ -11,11 +11,14 @@ import MetricsTracker from './components/MetricsTracker';
 import AchievementsTab from './components/AchievementsTab';
 import { UserProfile, DailyPlan, ProgressLog, ChatMessage } from './types';
 import { InstallPrompt } from './components/InstallPrompt';
+import BodyScanMobileView from './components/BodyScanMobileView';
+import { WearableProvider } from './context/WearableContext';
+import { WearableStatusBar } from './components/WearableStatusBar';
 import { detectUserLocation } from './utils/location';
 import { 
   Dumbbell, MessageSquare, LineChart, UserCog, Sparkles, 
   Settings, LogOut, CheckCircle, Scale, Utensils, LogIn, User as UserIcon,
-  Database, RefreshCw, Trophy, RotateCcw, AlertTriangle, X
+  Database, RefreshCw, Trophy, RotateCcw, AlertTriangle, X, Watch
 } from 'lucide-react';
 import { 
   auth, signInWithGoogle, logoutUser, 
@@ -640,19 +643,21 @@ export default function App() {
     setIsResetting(true);
     isResettingRef.current = true;
     const currentUid = user?.uid || auth.currentUser?.uid;
+    const currentEmail = profile?.email || user?.email || auth.currentUser?.email;
 
     // 1. Clear Firestore while authenticated
-    if (currentUid) {
+    if (currentUid || currentEmail) {
       try {
-        await clearAllUserDataFromFirestore(currentUid);
+        await clearAllUserDataFromFirestore(currentUid || '', currentEmail || undefined);
       } catch (e) {
         console.error("Firestore clear error:", e);
       }
     }
 
-    // 2. Clear all local storage
+    // 2. Clear all local storage & session storage
     try {
       localStorage.clear();
+      sessionStorage.clear();
     } catch (e) {
       console.error("Local storage clear error:", e);
     }
@@ -665,6 +670,7 @@ export default function App() {
     setErrorText(null);
     setSyncStatusMsg(null);
     setActiveTab('today');
+    setUser(null);
 
     // 4. Logout if logged in
     try {
@@ -679,7 +685,8 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 flex flex-col">
+    <WearableProvider>
+      <div className="min-h-screen bg-slate-950 text-slate-200 flex flex-col">
       {/* Upper Navigation Bar with Mobile Safe Area */}
       <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 shadow-lg pt-safe">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -798,6 +805,9 @@ export default function App() {
       {/* Main Content Pane */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
         
+        {/* Wearable Biometric Status Bar Banner (Always Visible) */}
+        <WearableStatusBar className="mb-6" />
+
         {/* Connection/Plan error banner */}
         {errorText && (
           <div className="bg-red-950/40 border border-red-900/60 rounded-2xl p-4 mb-6 text-sm text-red-200 flex items-center justify-between">
@@ -870,249 +880,27 @@ export default function App() {
             )}
 
             {activeTab === 'profile_edit' && (
-              <div className="max-w-2xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-xl space-y-8">
-                <div className="border-b border-slate-800 pb-4">
-                  <h2 className="text-xl font-bold text-white uppercase tracking-tight">Current Coach Settings</h2>
-                  <p className="text-xs text-slate-500 mt-1">Review your recorded biological and performance parameters</p>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                  <div className="space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">Name</span>
-                    <span className="text-sm font-semibold text-white">{profile.name}</span>
+              <div className="max-w-2xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4">
+                <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg sm:text-xl font-bold text-white uppercase tracking-tight font-display">Coach Kai Settings & Biometrics</h2>
+                    <p className="text-[11px] text-slate-400 mt-0.5">360° Posture Calibration, Biomechanical Triage & Metabolic Logs</p>
                   </div>
-                  <div className="space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">Age</span>
-                    <span className="text-sm font-semibold text-white">{profile.age} years</span>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">Gender</span>
-                    <span className="text-sm font-semibold text-white uppercase">{profile.gender}</span>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">
-                      Height
-                    </span>
-                    <span className="text-sm font-semibold text-white">
-                      {profile.height ? `${profile.height} cm` : "175 cm"}
-                    </span>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">
-                      Estimated Weight Baseline
-                    </span>
-                    <span className="text-sm font-semibold text-white">
-                      {profile.calculated_weight_kg ? `${profile.calculated_weight_kg} kg` : profile.weight ? `${profile.weight} kg` : "84 kg"}
-                    </span>
-                  </div>
-                  {profile.targetWeight && (
-                    <div className="space-y-1">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">Target Weight</span>
-                      <span className="text-sm font-semibold text-sky-400">{profile.targetWeight} kg</span>
-                    </div>
-                  )}
-                  <div className="space-y-1 col-span-2 md:col-span-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">Fitness Targets</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {(profile.goals || (profile.goal ? [profile.goal] : ['fat_loss_muscle_gain'])).map((g, idx) => (
-                        <span key={idx} className="text-sm font-bold text-slate-300 uppercase bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-md text-[9px] inline-block">
-                          {g.replace('_', ' ')}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="space-y-1 col-span-2 md:col-span-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">Activity Habits</span>
-                    <span className="text-sm font-bold text-slate-300 uppercase bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-md text-[10px] inline-block mt-0.5">
-                      {profile.activityLevel}
-                    </span>
-                  </div>
-                  <div className="space-y-1 col-span-2 md:col-span-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">Diet Preference</span>
-                    <span className="text-sm font-bold text-slate-300 uppercase bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-md text-[10px] inline-block mt-0.5">
-                      {profile.dietPreference}
-                    </span>
-                  </div>
-                  <div className="space-y-1 col-span-2 md:col-span-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">Diet Type</span>
-                    <span className="text-sm font-bold text-slate-300 uppercase bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-md text-[10px] inline-block mt-0.5">
-                      {profile.dietType || 'non_veg'}
-                    </span>
-                  </div>
-                  <div className="space-y-1 col-span-2 md:col-span-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">Workout Venue</span>
-                    <span className="text-sm font-bold text-slate-300 uppercase bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-md text-[10px] inline-block mt-0.5">
-                      {profile.workoutLocation || 'both'}
-                    </span>
-                  </div>
-                  <div className="space-y-1 col-span-2 md:col-span-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block font-display">Experience Level</span>
-                    <span className="text-sm font-bold text-slate-300 uppercase bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-md text-[10px] inline-block mt-0.5">
-                      {profile.experienceLevel || 'intermediate'}
+                  <div className="hidden sm:block">
+                    <span className="text-[10px] font-extrabold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                      Active Profile
                     </span>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 font-display block">Available Gear / Equipment</span>
-                    <span className="text-sm font-semibold text-white">{profile.equipmentAvailable || "Full Gym Access"}</span>
-                  </div>
-
-                  <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 font-display block">Recorded Food Allergies & Exclusions</span>
-                    <span className="text-sm font-semibold text-white">{profile.allergies || "None"}</span>
-                  </div>
-
-                  <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 font-display block">Staple/Favorite Foods Consumed</span>
-                    <span className="text-sm font-semibold text-white">{profile.typicalFoods || "Standard balanced options"}</span>
-                  </div>
-
-                  <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-1 border-l-4 border-l-amber-500/80">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 font-display block">Medical Conditions or Injury Logs</span>
-                    <span className="text-sm font-semibold text-amber-200">{profile.injuriesOrConditions || "No active injuries recorded"}</span>
-                  </div>
-
-                  {(profile.photoFront || profile.photoLeft || profile.photoRight || profile.photoBack || profile.physiquePhoto) && (
-                    <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
-                      <div>
-                        <span className="text-xs font-bold uppercase tracking-wider text-slate-500 font-display block">Uploaded Physique Portfolio (360° Calibration)</span>
-                        <p className="text-[10px] text-slate-500 font-medium">Your 4 multi-angle views recorded for postural and structural frame alignment.</p>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {[
-                          { key: 'photoFront' as const, label: 'Front View', fallback: profile.physiquePhoto },
-                          { key: 'photoLeft' as const, label: 'Left Side' },
-                          { key: 'photoRight' as const, label: 'Right Side' },
-                          { key: 'photoBack' as const, label: 'Back View' }
-                        ].map((item) => {
-                          const src = profile[item.key] || item.fallback;
-                          return (
-                            <div key={item.key} className="bg-slate-900 border border-slate-850 rounded-xl p-2 flex flex-col items-center">
-                              <span className="text-[9px] uppercase font-bold text-slate-400 mb-1.5 block tracking-wide">{item.label}</span>
-                              <div className="w-full h-[200px] sm:h-[240px] overflow-hidden rounded-lg flex items-center justify-center bg-slate-950 border border-slate-900 p-1">
-                                {src ? (
-                                  <img 
-                                    src={src} 
-                                    alt={item.label} 
-                                    className="h-full w-full object-contain p-1 bg-slate-950 rounded-lg"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                ) : (
-                                  <span className="text-[9px] text-slate-700 font-bold uppercase">Not Provided</span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                      <div className="space-y-3 pt-2 border-t border-slate-900">
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          <span className="text-xs font-bold uppercase tracking-wider text-sky-400 font-display block">Coach Kai's AI Vision Assessment</span>
-                          {profile.frameType && (
-                            <span className="text-[10px] uppercase font-extrabold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-0.5 rounded-md font-display">
-                              Archetype: {profile.frameType}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line bg-slate-900/40 p-3 rounded-xl border border-slate-900">
-                          {profile.physiqueAnalysis || "Physique photo successfully logged. Core alignment and anatomical balances mapped into training engine."}
-                        </p>
-
-                        {(profile.frontAngleReport || profile.sideAngleReport || profile.backAngleReport) && (
-                          <div className="space-y-2 pt-1">
-                            <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 block">360° Multi-Angle Frame Breakdown</span>
-                            
-                            {profile.frontAngleReport && (
-                              <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-850 text-xs">
-                                <div className="font-bold text-emerald-400 text-[10px] uppercase mb-0.5 flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Front View Assessment
-                                </div>
-                                <p className="text-slate-300 text-[11px] leading-relaxed">{profile.frontAngleReport}</p>
-                              </div>
-                            )}
-
-                            {profile.sideAngleReport && (
-                              <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-850 text-xs">
-                                <div className="font-bold text-sky-400 text-[10px] uppercase mb-0.5 flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400"></span> Profiles & Posture Alignment
-                                </div>
-                                <p className="text-slate-300 text-[11px] leading-relaxed">{profile.sideAngleReport}</p>
-                              </div>
-                            )}
-
-                            {profile.backAngleReport && (
-                              <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-850 text-xs">
-                                <div className="font-bold text-amber-400 text-[10px] uppercase mb-0.5 flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Back View & Lat Insertion
-                                </div>
-                                <p className="text-slate-300 text-[11px] leading-relaxed">{profile.backAngleReport}</p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-slate-800 space-y-4">
-                  <div className="bg-slate-950 p-4.5 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 bg-sky-500/10 text-sky-400 rounded-xl border border-sky-500/20 shrink-0">
-                        <Database className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-white uppercase tracking-wider font-display">
-                            {user ? (user.displayName || user.email || 'Connected Account') : 'Guest Account'}
-                          </span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            user ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'
-                          }`}>
-                            {user ? 'Database Active' : 'Not Signed In'}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          {user 
-                            ? 'All profile details, 4 photos & workout plans are safely preserved in the database when signing out.' 
-                            : 'Sign in to automatically sync and restore your saved data.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="shrink-0">
-                      {user ? (
-                        <button
-                          onClick={handleSignOut}
-                          className="px-4 py-2 bg-slate-900 hover:bg-slate-850 text-slate-200 hover:text-white border border-slate-800 hover:border-slate-700 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md"
-                        >
-                          <LogOut className="w-4 h-4 text-sky-400" />
-                          <span>Sign Out</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={handleHeaderGoogleLogin}
-                          className="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md"
-                        >
-                          <LogIn className="w-4 h-4" />
-                          <span>Sign In / Link Google</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={handleOpenResetModal}
-                    className="w-full border border-slate-800 hover:border-red-900/60 hover:bg-red-950/20 text-slate-400 hover:text-red-400 font-bold py-3.5 px-4 rounded-xl text-sm transition flex items-center justify-center gap-2"
-                  >
-                    <RotateCcw className="w-4 h-4 text-red-400" />
-                    <span>Reset & Restart All Data</span>
-                  </button>
-                </div>
+                {/* Refactored Mobile Tabbed / Segmented View with Accordions and Horizontal Carousels */}
+                <BodyScanMobileView 
+                  profile={profile}
+                  user={user}
+                  onSignOut={handleSignOut}
+                  onHeaderGoogleLogin={handleHeaderGoogleLogin}
+                  onOpenResetModal={handleOpenResetModal}
+                />
               </div>
             )}
           </div>
@@ -1188,5 +976,6 @@ export default function App() {
         </div>
       </footer>
     </div>
+    </WearableProvider>
   );
 }

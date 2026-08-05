@@ -13,7 +13,7 @@ import {
   Bell, AlarmClock, Volume2, VolumeX, Video, ExternalLink, TrendingUp, Zap,
   Trophy, Award, Crown, ShieldCheck, Star, Target, Medal
 } from 'lucide-react';
-// @ts-expect-error - image asset loaded dynamically by Vite
+// @ts-expect-error - dynamic image asset
 import muscleAnatomyBase from '../assets/images/muscle_anatomy_base_1784623731039.jpg';
 
 interface DashboardProps {
@@ -182,6 +182,17 @@ export default function Dashboard({
   const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
   const [showAllExercises, setShowAllExercises] = useState(false);
 
+  const [openDailyAccordions, setOpenDailyAccordions] = useState<Record<string, boolean>>({
+    dailyFocus: true,
+    nutrition: false,
+    bodyMap: false,
+    searchHub: false
+  });
+
+  const toggleDailyAccordion = (key: string) => {
+    setOpenDailyAccordions(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const handleSelectMuscle = (muscleId: string) => {
     const newSelected = selectedMuscle === muscleId ? null : muscleId;
     setSelectedMuscle(newSelected);
@@ -193,12 +204,15 @@ export default function Dashboard({
       setExerciseQuery(searchCategory);
       searchWgerExercises(searchCategory);
 
+      // Auto-open Live Search Hub accordion when selecting a muscle
+      setOpenDailyAccordions(prev => ({ ...prev, searchHub: true }));
+
       setTimeout(() => {
         const el = document.getElementById('search-swap-hub');
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
-      }, 50);
+      }, 100);
     } else {
       setExerciseQuery('');
       searchWgerExercises('');
@@ -709,425 +723,537 @@ export default function Dashboard({
 
       {plan && !loading && (
         <>
-          <div className="flex flex-col gap-8 mt-8">
+          <div className="flex flex-col gap-4 mt-8">
             
-            {/* Meal Plan List Card */}
-            <div className="bg-slate-900 rounded-2xl p-6 md:p-8 border border-slate-800 shadow-xl space-y-6 order-2">
-              <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
-                <div className="p-2 bg-sky-500/10 rounded-xl text-sky-400">
-                  <Utensils className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-black text-white uppercase tracking-tight">Your Nutrition Schedule</h2>
-                  <p className="text-xs text-slate-500 uppercase tracking-wider">Formulated for a {profile.dietPreference.toUpperCase()} dietary style</p>
-                </div>
-              </div>
-
-              <div className="divide-y divide-slate-800">
-                {(plan.meals || []).map((meal) => {
-                  const isExpanded = expandedMeal === meal.id;
-
-                  return (
-                    <div key={meal.id} className="py-4 first:pt-0 last:pb-0">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="mt-1.5 shrink-0 w-2 h-2 rounded-full bg-sky-500/60" />
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <h3 className="font-bold text-sm md:text-base text-slate-200">
-                              {meal.name}
-                            </h3>
-                            <button
-                              onClick={() => setExpandedMeal(isExpanded ? null : meal.id)}
-                              className="text-slate-500 hover:text-slate-300 p-1 rounded-lg hover:bg-slate-950 transition"
-                            >
-                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                            </button>
-                          </div>
-                          <div className="flex flex-wrap gap-2 mt-1.5">
-                            <span className="text-[10px] font-bold text-slate-400 bg-slate-950 border border-slate-800 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">
-                              {meal.calories} kcal
-                            </span>
-                            <span className="text-[10px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full font-mono">
-                              P: {meal.protein}g
-                            </span>
-                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full font-mono">
-                              C: {meal.carbs}g
-                            </span>
-                            <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full font-mono">
-                              F: {meal.fat}g
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Expanded recipe details */}
-                      <AnimatePresence>
-                        {isExpanded && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="ml-10 mt-4 p-4 bg-slate-950 rounded-xl border border-slate-800/80 space-y-3"
-                          >
-                            <div>
-                              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Ingredients:</h4>
-                              <ul className="list-disc list-inside text-sm text-slate-300 space-y-1">
-                                {meal.ingredients.map((ing, i) => (
-                                  <li key={i}>{ing}</li>
-                                ))}
-                              </ul>
-                            </div>
-                            {meal.instructions && (
-                              <div>
-                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Preparation:</h4>
-                                <p className="text-sm text-slate-300 leading-relaxed">{meal.instructions}</p>
-                              </div>
-                            )}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Workout Routine Card */}
-            <div className="bg-slate-900 rounded-2xl p-6 md:p-8 border border-slate-800 shadow-xl space-y-6 order-1">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-sky-500/10 rounded-xl text-sky-400">
+            {/* Card 1: Daily Focus */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden transition-all duration-200">
+              <button
+                type="button"
+                onClick={() => toggleDailyAccordion('dailyFocus')}
+                className="w-full min-h-[48px] p-4 flex items-center justify-between text-left select-none cursor-pointer hover:bg-slate-850/60 transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0 pr-2">
+                  <div className="p-2 bg-sky-500/10 rounded-xl text-sky-400 shrink-0">
                     <Dumbbell className="w-5 h-5" />
                   </div>
-                  <div>
-                    <h2 className="text-lg font-black text-white uppercase tracking-tight">{plan.workoutName}</h2>
-                    <p className="text-xs text-slate-500 uppercase tracking-wider">Daily focus • <strong className="text-sky-400 uppercase text-[10px] bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 rounded font-mono font-bold">{plan.workoutType}</strong></p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm sm:text-base font-black text-white uppercase tracking-tight font-display truncate">
+                        Daily Focus: {plan.workoutName}
+                      </h2>
+                      <span className="text-[9px] font-extrabold uppercase tracking-wider text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full font-mono shrink-0 hidden sm:inline-block">
+                        {plan.workoutType}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-medium truncate mt-0.5">
+                      {getTotalExercisesCount()} exercises scheduled for {selectedDay.toUpperCase()} split
+                    </p>
                   </div>
                 </div>
-                <div className="text-xs font-mono font-bold bg-slate-950 border border-slate-800 text-sky-400 px-2.5 py-1 rounded-full">
-                  {getTotalExercisesCount()} Exercises Available
+                <div className="p-1 text-slate-400 shrink-0">
+                  <ChevronDown 
+                    className={`w-5 h-5 transition-transform duration-200 ${
+                      openDailyAccordions.dailyFocus ? 'rotate-180 text-sky-400' : ''
+                    }`} 
+                  />
                 </div>
-              </div>
+              </button>
 
-              {(plan.warmupRoutine || plan.progressiveOverloadRule || plan.macroTimingTip) && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800/80">
-                  {plan.warmupRoutine && (
-                    <div className="space-y-1">
-                      <div className="text-[10px] uppercase font-bold text-sky-400 flex items-center gap-1">
-                        <Flame className="w-3.5 h-3.5" />
-                        3-Min Warm-Up
-                      </div>
-                      <p className="text-xs text-slate-300 leading-snug">{plan.warmupRoutine}</p>
-                    </div>
-                  )}
-                  {plan.progressiveOverloadRule && (
-                    <div className="space-y-1">
-                      <div className="text-[10px] uppercase font-bold text-amber-400 flex items-center gap-1">
-                        <TrendingUp className="w-3.5 h-3.5" />
-                        Overload Rule
-                      </div>
-                      <p className="text-xs text-slate-300 leading-snug">{plan.progressiveOverloadRule}</p>
-                    </div>
-                  )}
-                  {plan.macroTimingTip && (
-                    <div className="space-y-1">
-                      <div className="text-[10px] uppercase font-bold text-teal-400 flex items-center gap-1">
-                        <Zap className="w-3.5 h-3.5" />
-                        Anabolic Timing
-                      </div>
-                      <p className="text-xs text-slate-300 leading-snug">{plan.macroTimingTip}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {getExercisesToDisplay().length === 0 ? (
-                <div className="p-6 text-center space-y-2 bg-slate-950 border border-slate-800/60 rounded-xl">
-                  <CalendarClock className="w-8 h-8 text-slate-500 mx-auto" />
-                  <h3 className="font-bold text-sm text-slate-300 uppercase tracking-wide">Rest & Recovery Day</h3>
-                  <p className="text-xs text-slate-500 leading-relaxed max-w-sm mx-auto">Coach Kai recommends focused stretching, light walking, active hydration, and deep biological sleep today.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-800">
-                  {getExercisesToDisplay().map((ex) => {
-                    const isExpanded = expandedExercise === ex.id;
-
-                    return (
-                      <div key={ex.id} className="py-4 first:pt-0 last:pb-0">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="mt-1.5 shrink-0 w-2 h-2 rounded-full bg-sky-500/60" />
-
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                              <button
-                                onClick={() => handleOpenExerciseModal(ex)}
-                                className="font-bold text-sm md:text-base text-left transition hover:text-sky-400 flex items-center gap-1.5 group text-slate-200"
-                                title="Click to view proper form & visual instruction"
-                              >
-                                <span>{ex.name}</span>
-                                <Sparkles className="w-3.5 h-3.5 text-sky-500/60 group-hover:text-sky-400 transition" />
-                              </button>
-                              <button
-                                onClick={() => setExpandedExercise(isExpanded ? null : ex.id)}
-                                className="text-slate-500 hover:text-slate-300 p-1 rounded-lg hover:bg-slate-950 transition"
-                              >
-                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                              </button>
-                            </div>
-                            <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400 font-bold uppercase tracking-wide font-mono">
-                              <span>{ex.sets > 0 ? `${ex.sets} Sets` : 'Duration'}</span>
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-800" />
-                              <span className="text-sky-400">{ex.reps}</span>
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-800" />
-                              <span>Rest: {ex.rest}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Expanded details */}
-                        <AnimatePresence>
-                          {isExpanded && (
-                            <motion.div
-                              initial={{ opacity: 0, height: 0 }}
-                              animate={{ opacity: 1, height: 'auto' }}
-                              exit={{ opacity: 0, height: 0 }}
-                              className="ml-5 mt-4 p-4 bg-slate-950 rounded-xl border border-slate-800/80 space-y-3.5"
-                            >
-                              <div className="flex gap-2 items-start text-xs text-slate-300 leading-relaxed">
-                                <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
-                                <div>
-                                  <span className="font-bold text-slate-400 uppercase tracking-wide block mb-1">Coach's Pro Tip:</span>
-                                  {ex.notes || "Maintain controlled negative motion, focus on proper diaphragmatic breathing, and keep perfect spinal posture."}
-                                </div>
-                              </div>
-
-                              <div className="flex gap-2 items-center text-xs text-slate-300 pt-2.5 border-t border-slate-900">
-                                <Video className="w-4 h-4 text-emerald-400 shrink-0" />
-                                <div>
-                                  <span className="font-bold text-slate-400 uppercase tracking-wide block mb-0.5">Form Demonstration:</span>
-                                  <a
-                                    href={ex.videoUrl || `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.name + " exercise form tutorial")}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-sky-400 hover:text-sky-300 font-bold hover:underline"
-                                  >
-                                    Watch form tutorial video
-                                    <ExternalLink className="w-3 h-3" />
-                                  </a>
-                                </div>
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {getTotalExercisesCount() > 10 && (
-                <div className="pt-4 border-t border-slate-800 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => setShowAllExercises(!showAllExercises)}
-                    className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/15 border border-sky-500/20 px-5 py-3 rounded-xl transition cursor-pointer"
+              <AnimatePresence initial={false}>
+                {openDailyAccordions.dailyFocus && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="border-t border-slate-800/80 p-4 sm:p-6 space-y-6"
                   >
-                    {showAllExercises ? (
-                      <>
-                        <span>Show Less</span>
-                        <ChevronUp className="w-4 h-4" />
-                      </>
-                    ) : (
-                      <>
-                        <span>Show All {getTotalExercisesCount()} Exercises for {selectedDay} Split</span>
-                        <ChevronDown className="w-4 h-4" />
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
-
-
-            
-            {/* Interactive Muscle Reference Map */}
-            <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-xl space-y-4 order-3">
-              <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
-                <div className="p-2 bg-sky-500/10 rounded-xl text-sky-400">
-                  <Dumbbell className="w-5 h-5 animate-pulse" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-black text-white uppercase tracking-wider">Interactive Muscle Map</h2>
-                  <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mt-0.5">Targeted muscle reference guide</p>
-                </div>
-              </div>
-
-              <div className="relative w-full aspect-[16/9] bg-slate-950 rounded-xl overflow-hidden border border-slate-800/80 group">
-                <img 
-                  src={muscleAnatomyBase} 
-                  alt="Target Muscle Anatomy Map" 
-                  className="w-full h-full object-cover opacity-85 group-hover:scale-[1.015] transition-transform duration-700"
-                  referrerPolicy="no-referrer"
-                />
-
-                {/* Absolute Hotspot Markers */}
-                {musclesData.map((muscle) => {
-                  const isActive = activeMuscles.has(muscle.id);
-                  const isSelected = selectedMuscle === muscle.id;
-                  const matchingExercises = (plan.exercises || []).filter(ex => {
-                    const name = ex.name.toLowerCase();
-                    if (muscle.id === 'chest' && (name.includes("push-up") || name.includes("press") || name.includes("chest") || name.includes("pec") || name.includes("dip"))) return true;
-                    if (muscle.id === 'back' && (name.includes("row") || name.includes("pull-up") || name.includes("chin-up") || name.includes("lat") || name.includes("back") || name.includes("cobra") || name.includes("angel"))) return true;
-                    if (muscle.id === 'biceps' && (name.includes("curl") || name.includes("bicep") || name.includes("pull-up") || name.includes("chin-up") || name.includes("row"))) return true;
-                    if (muscle.id === 'triceps' && (name.includes("dip") || name.includes("tricep") || name.includes("extension") || name.includes("press") || name.includes("push-up"))) return true;
-                    if (muscle.id === 'abs' && (name.includes("twist") || name.includes("plank") || name.includes("ab ") || name.includes("crunch") || name.includes("core") || name.includes("sit-up"))) return true;
-                    if (muscle.id === 'legs' && (name.includes("squat") || name.includes("lung") || name.includes("deadlift") || name.includes("bridge") || name.includes("leg") || name.includes("calf") || name.includes("hamstring") || name.includes("quad"))) return true;
-                    if (muscle.id === 'forearms' && (name.includes("forearm") || name.includes("wrist") || name.includes("grip"))) return true;
-                    if (muscle.id === 'shoulders' && (name.includes("raise") || name.includes("shoulder") || name.includes("delt") || name.includes("press") || name.includes("push-up"))) return true;
-                    return false;
-                  });
-
-                  return (
-                    <div 
-                      key={muscle.id}
-                      className="absolute"
-                      style={{ left: `${muscle.x}%`, top: `${muscle.y}%` }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleSelectMuscle(muscle.id)}
-                        className="relative flex items-center justify-center focus:outline-none cursor-pointer group/dot"
-                      >
-                        <span className={`absolute inline-flex h-4 w-4 rounded-full opacity-75 ${
-                          isActive ? 'bg-emerald-400 animate-ping' : isSelected ? 'bg-sky-400 animate-ping' : ''
-                        }`} />
-                        <span className={`relative rounded-full h-3.5 w-3.5 border border-white flex items-center justify-center transition-all ${
-                          isSelected ? 'scale-125 bg-white' : isActive ? 'bg-emerald-500 shadow-md shadow-emerald-500/20' : 'bg-sky-500 shadow-md shadow-sky-500/20'
-                        }`} />
-                        
-                        {/* Interactive Tooltip bubble */}
-                        <div className={`absolute bottom-6 pointer-events-none transition-all duration-300 flex flex-col items-center ${
-                          isSelected ? 'opacity-100 scale-100' : 'opacity-0 scale-95 group-hover/dot:opacity-100 group-hover/dot:scale-100'
-                        } z-20`}>
-                          <div className="bg-slate-950/95 border border-slate-800 text-white rounded-lg p-3.5 shadow-2xl whitespace-nowrap text-left space-y-1 backdrop-blur-md">
-                            <div className="flex items-center gap-2.5 justify-between">
-                              <span className="font-black text-xs uppercase tracking-wider">{muscle.name}</span>
-                              {isActive && (
-                                <span className="text-[8px] font-black uppercase text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono tracking-wider font-bold">Active Today</span>
-                              )}
+                    {(plan.warmupRoutine || plan.progressiveOverloadRule || plan.macroTimingTip) && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800/80">
+                        {plan.warmupRoutine && (
+                          <div className="space-y-1">
+                            <div className="text-[10px] uppercase font-bold text-sky-400 flex items-center gap-1">
+                              <Flame className="w-3.5 h-3.5" />
+                              3-Min Warm-Up
                             </div>
-                            <div className="text-[9px] text-slate-500 font-mono italic tracking-wide">{muscle.technicalName}</div>
-                            {matchingExercises.length > 0 && (
-                              <div className="pt-2 border-t border-slate-900 mt-2 space-y-1">
-                                <span className="text-[8px] text-slate-400 font-black uppercase tracking-wider block">Today's Exercises:</span>
-                                {matchingExercises.map((e, idx) => (
-                                  <span key={idx} className="text-[10px] text-sky-400 font-bold block">• {e.name}</span>
-                                ))}
-                              </div>
-                            )}
+                            <p className="text-xs text-slate-300 leading-snug">{plan.warmupRoutine}</p>
                           </div>
-                          <div className="w-2.5 h-2.5 bg-slate-950 border-r border-b border-slate-850 rotate-45 -mt-1.5" />
-                        </div>
-                      </button>
+                        )}
+                        {plan.progressiveOverloadRule && (
+                          <div className="space-y-1">
+                            <div className="text-[10px] uppercase font-bold text-amber-400 flex items-center gap-1">
+                              <TrendingUp className="w-3.5 h-3.5" />
+                              Overload Rule
+                            </div>
+                            <p className="text-xs text-slate-300 leading-snug">{plan.progressiveOverloadRule}</p>
+                          </div>
+                        )}
+                        {plan.macroTimingTip && (
+                          <div className="space-y-1">
+                            <div className="text-[10px] uppercase font-bold text-teal-400 flex items-center gap-1">
+                              <Zap className="w-3.5 h-3.5" />
+                              Anabolic Timing
+                            </div>
+                            <p className="text-xs text-slate-300 leading-snug">{plan.macroTimingTip}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {getExercisesToDisplay().length === 0 ? (
+                      <div className="p-6 text-center space-y-2 bg-slate-950 border border-slate-800/60 rounded-xl">
+                        <CalendarClock className="w-8 h-8 text-slate-500 mx-auto" />
+                        <h3 className="font-bold text-sm text-slate-300 uppercase tracking-wide">Rest & Recovery Day</h3>
+                        <p className="text-xs text-slate-500 leading-relaxed max-w-sm mx-auto">Coach Kai recommends focused stretching, light walking, active hydration, and deep biological sleep today.</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-slate-800">
+                        {getExercisesToDisplay().map((ex) => {
+                          const isExpanded = expandedExercise === ex.id;
+
+                          return (
+                            <div key={ex.id} className="py-4 first:pt-0 last:pb-0">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="mt-1.5 shrink-0 w-2 h-2 rounded-full bg-sky-500/60" />
+
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <button
+                                      onClick={() => handleOpenExerciseModal(ex)}
+                                      className="font-bold text-sm md:text-base text-left transition hover:text-sky-400 flex items-center gap-1.5 group text-slate-200"
+                                      title="Click to view proper form & visual instruction"
+                                    >
+                                      <span>{ex.name}</span>
+                                      <Sparkles className="w-3.5 h-3.5 text-sky-500/60 group-hover:text-sky-400 transition" />
+                                    </button>
+                                    <button
+                                      onClick={() => setExpandedExercise(isExpanded ? null : ex.id)}
+                                      className="text-slate-500 hover:text-slate-300 p-1 rounded-lg hover:bg-slate-950 transition"
+                                    >
+                                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                    </button>
+                                  </div>
+                                  <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400 font-bold uppercase tracking-wide font-mono">
+                                    <span>{ex.sets > 0 ? `${ex.sets} Sets` : 'Duration'}</span>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-800" />
+                                    <span className="text-sky-400">{ex.reps}</span>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-800" />
+                                    <span>Rest: {ex.rest}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Expanded details */}
+                              <AnimatePresence>
+                                {isExpanded && (
+                                  <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="ml-5 mt-4 p-4 bg-slate-950 rounded-xl border border-slate-800/80 space-y-3.5"
+                                  >
+                                    <div className="flex gap-2 items-start text-xs text-slate-300 leading-relaxed">
+                                      <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+                                      <div>
+                                        <span className="font-bold text-slate-400 uppercase tracking-wide block mb-1">Coach's Pro Tip:</span>
+                                        {ex.notes || "Maintain controlled negative motion, focus on proper diaphragmatic breathing, and keep perfect spinal posture."}
+                                      </div>
+                                    </div>
+
+                                    <div className="flex gap-2 items-center text-xs text-slate-300 pt-2.5 border-t border-slate-900">
+                                      <Video className="w-4 h-4 text-emerald-400 shrink-0" />
+                                      <div>
+                                        <span className="font-bold text-slate-400 uppercase tracking-wide block mb-0.5">Form Demonstration:</span>
+                                        <a
+                                          href={ex.videoUrl || `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.name + " exercise form tutorial")}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-sky-400 hover:text-sky-300 font-bold hover:underline"
+                                        >
+                                          Watch form tutorial video
+                                          <ExternalLink className="w-3 h-3" />
+                                        </a>
+                                      </div>
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {getTotalExercisesCount() > 10 && (
+                      <div className="pt-4 border-t border-slate-800 flex justify-center">
+                        <button
+                          type="button"
+                          onClick={() => setShowAllExercises(!showAllExercises)}
+                          className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/15 border border-sky-500/20 px-5 py-3 rounded-xl transition cursor-pointer"
+                        >
+                          {showAllExercises ? (
+                            <>
+                              <span>Show Less</span>
+                              <ChevronUp className="w-4 h-4" />
+                            </>
+                          ) : (
+                            <>
+                              <span>Show All {getTotalExercisesCount()} Exercises for {selectedDay} Split</span>
+                              <ChevronDown className="w-4 h-4" />
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Card 2: Nutrition Schedule */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden transition-all duration-200">
+              <button
+                type="button"
+                onClick={() => toggleDailyAccordion('nutrition')}
+                className="w-full min-h-[48px] p-4 flex items-center justify-between text-left select-none cursor-pointer hover:bg-slate-850/60 transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0 pr-2">
+                  <div className="p-2 bg-sky-500/10 rounded-xl text-sky-400 shrink-0">
+                    <Utensils className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm sm:text-base font-black text-white uppercase tracking-tight font-display truncate">
+                        Nutrition Schedule
+                      </h2>
+                      <span className="text-[9px] font-extrabold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full font-mono shrink-0 hidden sm:inline-block">
+                        {profile.dietPreference.toUpperCase()}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* Badges navigation panel for muscle selection */}
-              <div className="space-y-1.5 pt-1.5">
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Select Muscle to Highlight:</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {musclesData.map((muscle) => {
-                    const isActive = activeMuscles.has(muscle.id);
-                    const isSelected = selectedMuscle === muscle.id;
-                    return (
-                      <button
-                        key={muscle.id}
-                        type="button"
-                        onClick={() => handleSelectMuscle(muscle.id)}
-                        className={`text-[9px] font-black uppercase px-2 py-1.5 rounded-lg border transition-all duration-250 cursor-pointer ${
-                          isSelected 
-                            ? 'bg-sky-500 text-slate-950 border-sky-400 font-black shadow-lg shadow-sky-500/10' 
-                            : isActive 
-                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20' 
-                              : 'bg-slate-950 text-slate-400 border-slate-800/80 hover:text-slate-300 hover:border-slate-700'
-                        }`}
-                      >
-                        {muscle.name}
-                        {isActive && <span className="ml-1 text-[7px] px-1 py-0.2 bg-emerald-500 text-slate-950 rounded font-black tracking-widest">ACTIVE</span>}
-                      </button>
-                    );
-                  })}
+                    <p className="text-[11px] text-slate-400 font-medium truncate mt-0.5">
+                      {(plan.meals || []).length} meals • Formulated for {profile.dietPreference} style
+                    </p>
+                  </div>
                 </div>
-              </div>
+                <div className="p-1 text-slate-400 shrink-0">
+                  <ChevronDown 
+                    className={`w-5 h-5 transition-transform duration-200 ${
+                      openDailyAccordions.nutrition ? 'rotate-180 text-sky-400' : ''
+                    }`} 
+                  />
+                </div>
+              </button>
+
+              <AnimatePresence initial={false}>
+                {openDailyAccordions.nutrition && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="border-t border-slate-800/80 p-4 sm:p-6 space-y-6"
+                  >
+                    <div className="divide-y divide-slate-800">
+                      {(plan.meals || []).map((meal) => {
+                        const isExpanded = expandedMeal === meal.id;
+
+                        return (
+                          <div key={meal.id} className="py-4 first:pt-0 last:pb-0">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="mt-1.5 shrink-0 w-2 h-2 rounded-full bg-sky-500/60" />
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <h3 className="font-bold text-sm md:text-base text-slate-200">
+                                    {meal.name}
+                                  </h3>
+                                  <button
+                                    onClick={() => setExpandedMeal(isExpanded ? null : meal.id)}
+                                    className="text-slate-500 hover:text-slate-300 p-1 rounded-lg hover:bg-slate-950 transition"
+                                  >
+                                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                  </button>
+                                </div>
+                                <div className="flex flex-wrap gap-2 mt-1.5">
+                                  <span className="text-[10px] font-bold text-slate-400 bg-slate-950 border border-slate-800 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">
+                                    {meal.calories} kcal
+                                  </span>
+                                  <span className="text-[10px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full font-mono">
+                                    P: {meal.protein}g
+                                  </span>
+                                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full font-mono">
+                                    C: {meal.carbs}g
+                                  </span>
+                                  <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full font-mono">
+                                    F: {meal.fat}g
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Expanded recipe details */}
+                            <AnimatePresence>
+                              {isExpanded && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  className="ml-5 sm:ml-10 mt-4 p-4 bg-slate-950 rounded-xl border border-slate-800/80 space-y-3"
+                                >
+                                  <div>
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Ingredients:</h4>
+                                    <ul className="list-disc list-inside text-sm text-slate-300 space-y-1">
+                                      {meal.ingredients.map((ing, i) => (
+                                        <li key={i}>{ing}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                  {meal.instructions && (
+                                    <div>
+                                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Preparation:</h4>
+                                      <p className="text-sm text-slate-300 leading-relaxed">{meal.instructions}</p>
+                                    </div>
+                                  )}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
-            {/* Coach Support Card */}
-            <div className="bg-slate-950 rounded-2xl p-6 text-white border border-slate-800 shadow-xl space-y-4 order-5">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-sky-400" />
-                <h3 className="font-black text-white uppercase tracking-tight text-sm">Stuck or Unsatisfied?</h3>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                You can talk to Coach Kai at any time by clicking the{" "}
-                <button
-                  type="button"
-                  onClick={() => onChangeTab?.('chat')}
-                  className="text-sky-400 hover:text-sky-300 font-black uppercase underline cursor-pointer inline"
-                >
-                  Coach Chat
-                </button>{" "}
-                hyperlink to swap out recipes, change reps, configure exercises, or ask for motivation!
-              </p>
-            </div>
-
-        {/* Live Database Search & Tweak Engine */}
-        <div id="search-swap-hub" className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl relative overflow-hidden order-4">
-          <div className="absolute -right-24 -bottom-24 w-72 h-72 bg-sky-500/5 rounded-full blur-3xl pointer-events-none" />
-          
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
-            <div className="flex items-start gap-3.5">
-              <div className="p-3 bg-sky-500/10 rounded-2xl text-sky-400 shrink-0">
-                <Database className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-lg md:text-xl font-black text-white uppercase tracking-tight flex items-center gap-2">
-                  Coach Kai's Live Search & Swap Hub
-                </h3>
-                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-0.5 max-w-2xl leading-relaxed">
-                  Directly query <strong className="text-sky-400">Coach Kai's AI Exercise Engine</strong> and the <strong className="text-sky-400">Open Food Facts Database</strong> to add, modify, or swap exercises and nutrition options live.
-                </p>
-              </div>
-            </div>
-
-            {/* Mode Selector */}
-            <div className="flex flex-wrap items-center bg-slate-950 p-1.5 border border-slate-800/60 rounded-2xl shrink-0 gap-1 sm:gap-0">
+            {/* Card 3: Interactive Body Map */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden transition-all duration-200">
               <button
                 type="button"
-                onClick={() => setDbMode('exercises')}
-                className={`px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                  dbMode === 'exercises'
-                    ? 'bg-sky-500 text-slate-950 shadow-lg shadow-sky-500/10'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
+                onClick={() => toggleDailyAccordion('bodyMap')}
+                className="w-full min-h-[48px] p-4 flex items-center justify-between text-left select-none cursor-pointer hover:bg-slate-850/60 transition-colors"
               >
-                🏋️ AI Search Explorer
+                <div className="flex items-center gap-3 min-w-0 pr-2">
+                  <div className="p-2 bg-sky-500/10 rounded-xl text-sky-400 shrink-0">
+                    <Dumbbell className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm sm:text-base font-black text-white uppercase tracking-tight font-display truncate">
+                        Interactive Body Map
+                      </h2>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-medium truncate mt-0.5">
+                      Targeted muscle reference guide & active hotspots
+                    </p>
+                  </div>
+                </div>
+                <div className="p-1 text-slate-400 shrink-0">
+                  <ChevronDown 
+                    className={`w-5 h-5 transition-transform duration-200 ${
+                      openDailyAccordions.bodyMap ? 'rotate-180 text-sky-400' : ''
+                    }`} 
+                  />
+                </div>
               </button>
+
+              <AnimatePresence initial={false}>
+                {openDailyAccordions.bodyMap && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="border-t border-slate-800/80 p-4 sm:p-6 space-y-4"
+                  >
+                    <div className="relative w-full aspect-[16/9] bg-slate-950 rounded-xl overflow-hidden border border-slate-800/80 group">
+                      <img 
+                        src={muscleAnatomyBase} 
+                        alt="Target Muscle Anatomy Map" 
+                        className="w-full h-full object-cover opacity-85 group-hover:scale-[1.015] transition-transform duration-700"
+                        referrerPolicy="no-referrer"
+                      />
+
+                      {/* Absolute Hotspot Markers */}
+                      {musclesData.map((muscle) => {
+                        const isActive = activeMuscles.has(muscle.id);
+                        const isSelected = selectedMuscle === muscle.id;
+                        const matchingExercises = (plan.exercises || []).filter(ex => {
+                          const name = ex.name.toLowerCase();
+                          if (muscle.id === 'chest' && (name.includes("push-up") || name.includes("press") || name.includes("chest") || name.includes("pec") || name.includes("dip"))) return true;
+                          if (muscle.id === 'back' && (name.includes("row") || name.includes("pull-up") || name.includes("chin-up") || name.includes("lat") || name.includes("back") || name.includes("cobra") || name.includes("angel"))) return true;
+                          if (muscle.id === 'biceps' && (name.includes("curl") || name.includes("bicep") || name.includes("pull-up") || name.includes("chin-up") || name.includes("row"))) return true;
+                          if (muscle.id === 'triceps' && (name.includes("dip") || name.includes("tricep") || name.includes("extension") || name.includes("press") || name.includes("push-up"))) return true;
+                          if (muscle.id === 'abs' && (name.includes("twist") || name.includes("plank") || name.includes("ab ") || name.includes("crunch") || name.includes("core") || name.includes("sit-up"))) return true;
+                          if (muscle.id === 'legs' && (name.includes("squat") || name.includes("lung") || name.includes("deadlift") || name.includes("bridge") || name.includes("leg") || name.includes("calf") || name.includes("hamstring") || name.includes("quad"))) return true;
+                          if (muscle.id === 'forearms' && (name.includes("forearm") || name.includes("wrist") || name.includes("grip"))) return true;
+                          if (muscle.id === 'shoulders' && (name.includes("raise") || name.includes("shoulder") || name.includes("delt") || name.includes("press") || name.includes("push-up"))) return true;
+                          return false;
+                        });
+
+                        return (
+                          <div 
+                            key={muscle.id}
+                            className="absolute"
+                            style={{ left: `${muscle.x}%`, top: `${muscle.y}%` }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleSelectMuscle(muscle.id)}
+                              className="relative flex items-center justify-center focus:outline-none cursor-pointer group/dot"
+                            >
+                              <span className={`absolute inline-flex h-4 w-4 rounded-full opacity-75 ${
+                                isActive ? 'bg-emerald-400 animate-ping' : isSelected ? 'bg-sky-400 animate-ping' : ''
+                              }`} />
+                              <span className={`relative rounded-full h-3.5 w-3.5 border border-white flex items-center justify-center transition-all ${
+                                isSelected ? 'scale-125 bg-white' : isActive ? 'bg-emerald-500 shadow-md shadow-emerald-500/20' : 'bg-sky-500 shadow-md shadow-sky-500/20'
+                              }`} />
+                              
+                              {/* Interactive Tooltip bubble */}
+                              <div className={`absolute bottom-6 pointer-events-none transition-all duration-300 flex flex-col items-center ${
+                                isSelected ? 'opacity-100 scale-100' : 'opacity-0 scale-95 group-hover/dot:opacity-100 group-hover/dot:scale-100'
+                              } z-20`}>
+                                <div className="bg-slate-950/95 border border-slate-800 text-white rounded-lg p-3.5 shadow-2xl whitespace-nowrap text-left space-y-1 backdrop-blur-md">
+                                  <div className="flex items-center gap-2.5 justify-between">
+                                    <span className="font-black text-xs uppercase tracking-wider">{muscle.name}</span>
+                                    {isActive && (
+                                      <span className="text-[8px] font-black uppercase text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono tracking-wider font-bold">Active Today</span>
+                                    )}
+                                  </div>
+                                  <div className="text-[9px] text-slate-500 font-mono italic tracking-wide">{muscle.technicalName}</div>
+                                  {matchingExercises.length > 0 && (
+                                    <div className="pt-2 border-t border-slate-900 mt-2 space-y-1">
+                                      <span className="text-[8px] text-slate-400 font-black uppercase tracking-wider block">Today's Exercises:</span>
+                                      {matchingExercises.map((e, idx) => (
+                                        <span key={idx} className="text-[10px] text-sky-400 font-bold block">• {e.name}</span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="w-2.5 h-2.5 bg-slate-950 border-r border-b border-slate-850 rotate-45 -mt-1.5" />
+                              </div>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Badges navigation panel for muscle selection */}
+                    <div className="space-y-1.5 pt-1.5">
+                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Select Muscle to Highlight:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {musclesData.map((muscle) => {
+                          const isActive = activeMuscles.has(muscle.id);
+                          const isSelected = selectedMuscle === muscle.id;
+                          return (
+                            <button
+                              key={muscle.id}
+                              type="button"
+                              onClick={() => handleSelectMuscle(muscle.id)}
+                              className={`text-[9px] font-black uppercase px-2 py-1.5 rounded-lg border transition-all duration-250 cursor-pointer ${
+                                isSelected 
+                                  ? 'bg-sky-500 text-slate-950 border-sky-400 font-black shadow-lg shadow-sky-500/10' 
+                                  : isActive 
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20' 
+                                    : 'bg-slate-950 text-slate-400 border-slate-800/80 hover:text-slate-300 hover:border-slate-700'
+                              }`}
+                            >
+                              {muscle.name}
+                              {isActive && <span className="ml-1 text-[7px] px-1 py-0.2 bg-emerald-500 text-slate-950 rounded font-black tracking-widest">ACTIVE</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Card 4: Live Search Hub */}
+            <div id="search-swap-hub" className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden transition-all duration-200">
               <button
                 type="button"
-                onClick={() => setDbMode('foods')}
-                className={`px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                  dbMode === 'foods'
-                    ? 'bg-sky-500 text-slate-950 shadow-lg shadow-sky-500/10'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
+                onClick={() => toggleDailyAccordion('searchHub')}
+                className="w-full min-h-[48px] p-4 flex items-center justify-between text-left select-none cursor-pointer hover:bg-slate-850/60 transition-colors"
               >
-                🥗 Nutrition Index (OFF)
+                <div className="flex items-center gap-3 min-w-0 pr-2">
+                  <div className="p-2 bg-sky-500/10 rounded-xl text-sky-400 shrink-0">
+                    <Database className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm sm:text-base font-black text-white uppercase tracking-tight font-display truncate">
+                        Live Search Hub
+                      </h2>
+                      <span className="text-[9px] font-extrabold uppercase tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full font-mono shrink-0 hidden sm:inline-block">
+                        AI & OFF Engine
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-medium truncate mt-0.5">
+                      Query Kai's exercise database & Open Food Facts to swap routine items
+                    </p>
+                  </div>
+                </div>
+                <div className="p-1 text-slate-400 shrink-0">
+                  <ChevronDown 
+                    className={`w-5 h-5 transition-transform duration-200 ${
+                      openDailyAccordions.searchHub ? 'rotate-180 text-sky-400' : ''
+                    }`} 
+                  />
+                </div>
               </button>
-            </div>
-          </div>
+
+              <AnimatePresence initial={false}>
+                {openDailyAccordions.searchHub && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="border-t border-slate-800/80 p-4 sm:p-6 space-y-6"
+                  >
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
+                      <div className="flex items-start gap-3.5">
+                        <div className="p-3 bg-sky-500/10 rounded-2xl text-sky-400 shrink-0">
+                          <Database className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg md:text-xl font-black text-white uppercase tracking-tight flex items-center gap-2">
+                            Coach Kai's Live Search & Swap Hub
+                          </h3>
+                          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-0.5 max-w-2xl leading-relaxed">
+                            Directly query <strong className="text-sky-400">Coach Kai's AI Exercise Engine</strong> and the <strong className="text-sky-400">Open Food Facts Database</strong> to add, modify, or swap exercises and nutrition options live.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Mode Selector */}
+                      <div className="flex flex-wrap items-center bg-slate-950 p-1.5 border border-slate-800/60 rounded-2xl shrink-0 gap-1 sm:gap-0">
+                        <button
+                          type="button"
+                          onClick={() => setDbMode('exercises')}
+                          className={`px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                            dbMode === 'exercises'
+                              ? 'bg-sky-500 text-slate-950 shadow-lg shadow-sky-500/10'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          🏋️ AI Search Explorer
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDbMode('foods')}
+                          className={`px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                            dbMode === 'foods'
+                              ? 'bg-sky-500 text-slate-950 shadow-lg shadow-sky-500/10'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          🥗 Nutrition Index (OFF)
+                        </button>
+                      </div>
+                    </div>
 
           {/* Search Bar or Target Split Banner */}
           <div className="space-y-4">
@@ -1431,8 +1557,7 @@ export default function Dashboard({
                         </div>
                       ))}
                     </div>
-                  )
-                ) : (
+                  )) : (
                   foods.length === 0 ? (
                     <div className="text-center py-10 bg-slate-950/20 border border-slate-800/40 rounded-2xl">
                       <p className="text-xs text-slate-500 uppercase font-black tracking-wider">No matching foods in this nutrient category. Try clearing nutrient filters!</p>
@@ -1558,12 +1683,35 @@ export default function Dashboard({
                       })}
                     </div>
                   )
-                )}
-              </div>
-            )}
-          </div>
+                )
+              }
+            </div>
+          )}
         </div>
-      </div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+</div>
+
+            {/* Coach Support Card */}
+            <div className="bg-slate-950 rounded-2xl p-6 text-white border border-slate-800 shadow-xl space-y-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-sky-400" />
+                <h3 className="font-black text-white uppercase tracking-tight text-sm">Stuck or Unsatisfied?</h3>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                You can talk to Coach Kai at any time by clicking the{" "}
+                <button
+                  type="button"
+                  onClick={() => onChangeTab?.('chat')}
+                  className="text-sky-400 hover:text-sky-300 font-black uppercase underline cursor-pointer inline"
+                >
+                  Coach Chat
+                </button>{" "}
+                hyperlink to swap out recipes, change reps, configure exercises, or ask for motivation!
+              </p>
+            </div>
+          </div>
 
         {/* Exercise Instruction Modal */}
         <AnimatePresence>
@@ -1742,7 +1890,7 @@ export default function Dashboard({
                   </button>
                 </div>
               </motion.div>
-              </motion.div>
+            </motion.div>
           )}
         </AnimatePresence>
       </>

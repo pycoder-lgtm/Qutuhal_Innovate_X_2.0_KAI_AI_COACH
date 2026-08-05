@@ -298,10 +298,6 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
           if (remote && (remote.name || remote.photoFront || remote.physiquePhoto || remote.weight)) {
             setFormData(remote);
             onComplete(remote as UserProfile);
-          } else if (formData.name && (formData.weight || formData.photoFront || formData.physiquePhoto)) {
-            const fullProfile = { ...formData, email } as UserProfile;
-            await saveProfileToFirestore(u.uid, fullProfile);
-            onComplete(fullProfile);
           } else {
             // Proceed directly to profile building step 1
             setCurrentStep(1);
@@ -329,12 +325,8 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
             // Credentials match & saved profile exists -> directly to daily plan!
             setFormData(remote);
             onComplete(remote as UserProfile);
-          } else if (formData.name && (formData.weight || formData.photoFront || formData.physiquePhoto)) {
-            const fullProfile = { ...formData, email } as UserProfile;
-            await saveProfileToFirestore(u.uid, fullProfile);
-            onComplete(fullProfile);
           } else {
-            // Credentials match but profile not built yet -> go to profile building
+            // Credentials match but profile not built yet or was reset -> go to profile building
             setFormData(prev => ({ ...prev, email }));
             setCurrentStep(1);
           }
@@ -391,10 +383,6 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
         if (remote && (remote.name || remote.photoFront || remote.physiquePhoto || remote.weight)) {
           setFormData(remote);
           onComplete(remote as UserProfile);
-        } else if (formData.name && (formData.weight || formData.photoFront || formData.physiquePhoto)) {
-          const fullProfile = { ...formData, email: u.email || formData.email } as UserProfile;
-          await saveProfileToFirestore(u.uid, fullProfile);
-          onComplete(fullProfile);
         } else {
           setCloudSyncMsg(`Signed in as ${u.email}. Please complete your profile details.`);
           setCurrentStep(1);
@@ -1094,17 +1082,17 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-3">
-                      {/* Compact 4-Photo Portfolio Preview */}
-                      <div className="grid grid-cols-2 gap-2 bg-slate-950 p-2.5 rounded-2xl border border-slate-800">
+                      {/* Compact 4-Photo Portfolio Preview (Horizontal Carousel on Mobile, Grid on Desktop) */}
+                      <div className="flex overflow-x-auto gap-2.5 sm:grid sm:grid-cols-2 bg-slate-950 p-2.5 rounded-2xl border border-slate-800 scrollbar-none snap-x snap-mandatory">
                         {[
                           { key: 'photoFront' as const, label: 'Front Angle' },
                           { key: 'photoLeft' as const, label: 'Left Side' },
                           { key: 'photoRight' as const, label: 'Right Side' },
                           { key: 'photoBack' as const, label: 'Back Angle' }
                         ].map((item) => (
-                          <div key={item.key} className="bg-slate-900/60 rounded-xl p-1.5 border border-slate-850 flex flex-col items-center">
+                          <div key={item.key} className="bg-slate-900/60 rounded-xl p-1.5 border border-slate-850 flex flex-col items-center min-w-[125px] sm:min-w-0 snap-center shrink-0 sm:shrink">
                             <span className="text-[9px] uppercase font-black text-slate-500 mb-1 block tracking-wider">{item.label}</span>
-                            <div className="w-full h-[150px] sm:h-[180px] overflow-hidden rounded-lg flex items-center justify-center bg-slate-950 border border-slate-900 p-1">
+                            <div className="w-full h-[140px] sm:h-[180px] overflow-hidden rounded-lg flex items-center justify-center bg-slate-950 border border-slate-900 p-1">
                               {formData[item.key] ? (
                                 <img 
                                   src={formData[item.key]} 
