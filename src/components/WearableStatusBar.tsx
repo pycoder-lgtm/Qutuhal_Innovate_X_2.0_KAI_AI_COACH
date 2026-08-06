@@ -74,9 +74,13 @@ export const WearableStatusBar: React.FC<WearableStatusBarProps> = ({
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 cursor-pointer transition select-none group"
             >
               <div className="relative flex items-center justify-center">
-                <Watch className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400" />
+                <Watch className={`w-4 h-4 group-hover:scale-110 transition-transform ${isWatchConnected ? 'text-emerald-400' : 'text-slate-500'}`} />
+                {isWatchConnected && (
+                  <>
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400" />
+                  </>
+                )}
               </div>
 
               <div className="flex flex-col">
@@ -84,8 +88,12 @@ export const WearableStatusBar: React.FC<WearableStatusBarProps> = ({
                   <span className="text-xs font-black text-white tracking-tight uppercase font-display line-clamp-1">
                     {watchDeviceName || 'Smartwatch'}
                   </span>
-                  <span className="text-[9px] font-mono uppercase bg-emerald-500/10 text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-500/20 font-bold">
-                    Active
+                  <span className={`text-[9px] font-mono uppercase px-1.5 py-0.2 rounded border font-bold ${
+                    isWatchConnected
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}>
+                    {isWatchConnected ? 'Active' : 'Offline'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-[10px] font-mono text-slate-400">

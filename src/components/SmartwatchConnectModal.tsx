@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useWearableSync } from '../utils/useWearableSync';
 import {
-  Watch, Heart, Activity, Moon, Footprints, ShieldCheck, CheckCircle2,
-  X, RefreshCw, Zap, ArrowRight, Sparkles, Smartphone
+  Watch, Heart, Activity, Footprints,
+  X, RefreshCw, Zap, Radio, AlertCircle, Unplug
 } from 'lucide-react';
 
 interface SmartwatchConnectModalProps {
@@ -16,31 +16,38 @@ export const SmartwatchConnectModal: React.FC<SmartwatchConnectModalProps> = ({
   onClose,
 }) => {
   const {
-    healthPermissionStatus,
+    connectionStatus,
+    device,
+    biometrics,
     userHealthMetrics,
-    requestPermissions,
-    fetchHealthMetrics,
+    connectWebBluetooth,
+    disconnectWebBluetooth,
   } = useWearableSync();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleConnect = async () => {
+  const handleConnectBluetooth = async (acceptAll = false) => {
     setIsLoading(true);
+    setErrorMessage(null);
     try {
-      await requestPermissions();
-    } catch (err) {
-      console.error('Error requesting health permissions:', err);
+      const result = await connectWebBluetooth(acceptAll);
+      if (!result.success) {
+        setErrorMessage(result.error || 'Failed to connect Bluetooth device.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Error initializing Web Bluetooth request.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleRefresh = async () => {
+  const handleDisconnect = async () => {
     setIsLoading(true);
     try {
-      await fetchHealthMetrics();
+      await disconnectWebBluetooth();
     } catch (err) {
-      console.error('Error fetching health metrics:', err);
+      console.error('Error disconnecting:', err);
     } finally {
       setIsLoading(false);
     }
@@ -48,7 +55,7 @@ export const SmartwatchConnectModal: React.FC<SmartwatchConnectModalProps> = ({
 
   if (!isOpen) return null;
 
-  const isGranted = healthPermissionStatus === 'granted';
+  const isConnected = connectionStatus === 'connected';
 
   return (
     <AnimatePresence>
@@ -71,10 +78,10 @@ export const SmartwatchConnectModal: React.FC<SmartwatchConnectModalProps> = ({
               </div>
               <div>
                 <h2 className="text-xl font-black text-white uppercase tracking-tight font-display flex items-center gap-2">
-                  Connect Your Smartwatch
+                  Connect Smartwatch
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Sync your daily Steps, Heart Rate, and Sleep Hours with Coach Kai.
+                  Web Bluetooth API (navigator.bluetooth.requestDevice)
                 </p>
               </div>
             </div>
@@ -88,53 +95,86 @@ export const SmartwatchConnectModal: React.FC<SmartwatchConnectModalProps> = ({
           </div>
 
           {/* Main Body */}
-          {!isGranted ? (
-            /* Permission Request State */
+          {!isConnected ? (
+            /* Bluetooth Device Discovery State */
             <div className="space-y-6 relative z-10">
-              <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-850 space-y-3">
-                <span className="text-xs font-mono uppercase tracking-wider text-slate-400 font-bold block">
-                  Permissions Required
-                </span>
-                <ul className="space-y-2 text-xs text-slate-300">
-                  <li className="flex items-center gap-2.5">
-                    <Footprints className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Daily Steps & Active Calories sync</span>
-                  </li>
+              <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-850 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono uppercase tracking-wider text-emerald-400 font-bold flex items-center gap-1.5">
+                    <Radio className="w-4 h-4 animate-pulse text-emerald-400" />
+                    Bluetooth GATT Device Scanner
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-bold">
+                    BLE 0x180D
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300">
+                  Search for real Bluetooth smartwatches, Apple Watch, Garmin, Polar, Wahoo, Whoop, or chest strap heart rate monitors in range.
+                </p>
+
+                <ul className="space-y-2 text-xs text-slate-300 pt-1 border-t border-slate-850">
                   <li className="flex items-center gap-2.5">
                     <Heart className="w-4 h-4 text-rose-400 shrink-0" />
-                    <span>Real-time Heart Rate zone calculation</span>
+                    <span>Live GATT Heart Rate streaming (0x2A37)</span>
                   </li>
                   <li className="flex items-center gap-2.5">
-                    <Moon className="w-4 h-4 text-purple-400 shrink-0" />
-                    <span>Sleep duration recovery analysis</span>
+                    <Activity className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Real-time effort zone & BPM music sync</span>
+                  </li>
+                  <li className="flex items-center gap-2.5">
+                    <Footprints className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Active fitness calories and step telemetry</span>
                   </li>
                 </ul>
               </div>
 
+              {/* Error Alert Box */}
+              {errorMessage && (
+                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <span className="font-bold block">Bluetooth Status Note:</span>
+                    <span>{errorMessage}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <div className="flex flex-col gap-2.5 pt-2">
                 <button
                   type="button"
-                  onClick={handleConnect}
+                  onClick={() => handleConnectBluetooth(false)}
                   disabled={isLoading}
-                  className="flex-1 py-3.5 px-5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black font-display uppercase tracking-tight flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition cursor-pointer disabled:opacity-50"
+                  className="w-full py-3.5 px-5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black font-display uppercase tracking-tight flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition cursor-pointer disabled:opacity-50"
                 >
                   {isLoading ? (
-                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    <>
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      Scanning for Bluetooth Devices...
+                    </>
                   ) : (
                     <>
-                      <ShieldCheck className="w-5 h-5" />
-                      Connect My Watch
+                      <Radio className="w-5 h-5" />
+                      Scan for Heart Rate & Fitness Devices
                     </>
                   )}
                 </button>
 
                 <button
                   type="button"
-                  onClick={onClose}
-                  className="py-3.5 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold font-mono text-xs transition cursor-pointer"
+                  onClick={() => handleConnectBluetooth(true)}
+                  disabled={isLoading}
+                  className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold font-mono text-xs transition cursor-pointer flex items-center justify-center gap-2"
                 >
-                  Skip For Now
+                  <span>Search All Bluetooth Devices (Fallback)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full py-2 text-center text-slate-500 hover:text-slate-400 text-xs font-mono transition cursor-pointer"
+                >
+                  Cancel
                 </button>
               </div>
             </div>
@@ -146,75 +186,75 @@ export const SmartwatchConnectModal: React.FC<SmartwatchConnectModalProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
                   <span className="text-sm font-bold text-emerald-400 font-mono">
-                    🟢 Smartwatch Linked
+                    🟢 Bluetooth Watch Linked
                   </span>
                 </div>
-                <span className="text-[11px] font-mono text-slate-400">
-                  {userHealthMetrics.connectedDeviceName}
+                <span className="text-xs font-mono font-bold text-white bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+                  {device.name || userHealthMetrics.connectedDeviceName}
                 </span>
               </div>
 
-              {/* 3 Quick Metric Cards */}
+              {/* Quick Metric Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* 1. Steps Card */}
+                {/* 1. Live Heart Rate Card */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-850 space-y-1">
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span className="text-[10px] font-mono uppercase font-bold">Live HR</span>
+                    <Heart className="w-4 h-4 text-rose-500 animate-pulse" />
+                  </div>
+                  <div className="text-xl font-black font-mono text-white">
+                    {biometrics.heartRate ? biometrics.heartRate : '--'} <span className="text-xs text-rose-400">BPM</span>
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-400">
+                    GATT Notification
+                  </div>
+                </div>
+
+                {/* 2. Steps Card */}
                 <div className="p-4 rounded-2xl bg-slate-950 border border-slate-850 space-y-1">
                   <div className="flex items-center justify-between text-slate-400">
                     <span className="text-[10px] font-mono uppercase font-bold">Steps</span>
                     <Footprints className="w-4 h-4 text-emerald-400" />
                   </div>
-                  <div className="text-lg font-black font-mono text-white">
-                    {userHealthMetrics.stepCount.toLocaleString()}
+                  <div className="text-xl font-black font-mono text-white">
+                    {biometrics.stepCount.toLocaleString()}
                   </div>
                   <div className="text-[10px] font-mono text-slate-400">
-                    / 10,000 steps
+                    Daily Telemetry
                   </div>
                 </div>
 
-                {/* 2. Heart Rate Card */}
+                {/* 3. Calories Card */}
                 <div className="p-4 rounded-2xl bg-slate-950 border border-slate-850 space-y-1">
                   <div className="flex items-center justify-between text-slate-400">
-                    <span className="text-[10px] font-mono uppercase font-bold">Heart Rate</span>
-                    <Heart className="w-4 h-4 text-rose-500" />
+                    <span className="text-[10px] font-mono uppercase font-bold">Calories</span>
+                    <Zap className="w-4 h-4 text-amber-400" />
                   </div>
-                  <div className="text-lg font-black font-mono text-white">
-                    {userHealthMetrics.heartRate || '--'} <span className="text-xs text-rose-400">BPM</span>
-                  </div>
-                  <div className="text-[10px] font-mono text-slate-400">
-                    Active Zone
-                  </div>
-                </div>
-
-                {/* 3. Sleep Card */}
-                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-850 space-y-1">
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span className="text-[10px] font-mono uppercase font-bold">Sleep</span>
-                    <Moon className="w-4 h-4 text-purple-400" />
-                  </div>
-                  <div className="text-lg font-black font-mono text-white">
-                    {userHealthMetrics.sleepHours} <span className="text-xs text-purple-400">hrs</span>
+                  <div className="text-xl font-black font-mono text-white">
+                    {biometrics.activeCalories} <span className="text-xs text-amber-400">kcal</span>
                   </div>
                   <div className="text-[10px] font-mono text-slate-400">
-                    last night
+                    Active Burn
                   </div>
                 </div>
               </div>
 
               {/* Actions Footer */}
-              <div className="flex items-center justify-between pt-2">
+              <div className="flex items-center justify-between pt-2 gap-3">
                 <button
                   type="button"
-                  onClick={handleRefresh}
+                  onClick={handleDisconnect}
                   disabled={isLoading}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono font-bold transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-mono font-bold transition cursor-pointer"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isLoading ? 'animate-spin' : ''}`} />
-                  Sync Metrics
+                  <Unplug className="w-3.5 h-3.5" />
+                  Disconnect Device
                 </button>
 
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black font-display text-xs uppercase tracking-tight transition cursor-pointer"
+                  className="px-6 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black font-display text-xs uppercase tracking-tight transition cursor-pointer"
                 >
                   Done
                 </button>

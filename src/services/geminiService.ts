@@ -1,3 +1,4 @@
+import { GoogleGenAI } from '@google/genai';
 import { BodyScanAnalysis } from '../types';
 
 export interface ScanResult {
@@ -8,10 +9,8 @@ export interface ScanResult {
 }
 
 const getApiKey = (): string => {
-  const key = import.meta.env.VITE_OPENROUTER_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
-  if (!key) {
-    throw new Error('API key is missing.');
-  }
+  const meta = import.meta as any;
+  const key = meta.env?.VITE_GEMINI_API_KEY || meta.env?.GEMINI_API_KEY || '';
   return key.trim();
 };
 
@@ -76,7 +75,6 @@ function parseScanAnalysisResponse(rawText: string): BodyScanAnalysis {
     console.warn("Using text fallback for scan analysis parsing");
   }
 
-  // Pre-calculated variable to prevent missing comma syntax errors in the return block
   const currentDate = new Date().toISOString().split('T')[0];
 
   return {
@@ -104,59 +102,34 @@ export async function analyzeBodyScanSafely(imagesBase64: string[]): Promise<Sca
     }
 
     const apiKey = getApiKey();
+    if (!apiKey) {
+      return { success: false, error: 'Gemini API key is not configured.' };
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
 
     const compressedImages = await Promise.all(
       imagesBase64.map((img) => compressImageBase64(img))
     );
 
-    const imagePayloads = compressedImages.map((imgData) => {
+    const imageParts = compressedImages.map((imgData) => {
+      const cleanBase64 = imgData.includes(',') ? imgData.split(',')[1] : imgData;
       return {
-        type: 'image_url',
-        image_url: { url: imgData }
+        inlineData: {
+          mimeType: 'image/jpeg',
+          data: cleanBase64,
+        },
       };
     });
 
-    // Safely formatted as a single string line to prevent template literal copy-paste bugs
     const systemPrompt = "You are Coach Kai, an elite biomechanics AI coach. Analyze the provided body posture photos (Front, Back, Left, Right). Provide a complete body composition and alignment assessment. End your response with a JSON block in this exact format: { \"bodyFatEst\": 14.5, \"postureScore\": 85, \"postureNotes\": \"Good head-to-spine alignment.\", \"shoulderSymmetry\": \"Left shoulder slightly elevated.\", \"pelvicTilt\": \"Slight anterior pelvic tilt observed.\", \"muscleHighlights\": [\"Upper Back\", \"Core\"], \"recommendations\": [\"Perform doorway chest stretches twice daily.\"] }";
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 35000);
-
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://localhost',
-        'X-Title': 'Coach Kai Mobile App'
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        model: 'meta-llama/llama-3.2-11b-vision-instruct:free',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: systemPrompt },
-              ...imagePayloads
-            ]
-          }
-        ]
-      })
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: [systemPrompt, ...imageParts],
     });
 
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      return { success: false, error: `Server error: ${response.status}` };
-    }
-
-    const resData = await response.json();
-    let rawContent = "";
-    
-    if (resData && resData.choices && resData.choices[0] && resData.choices[0].message) {
-        rawContent = resData.choices[0].message.content;
-    }
+    const rawContent = response.text || '';
 
     if (!rawContent) {
       return { success: false, error: 'Empty AI response.' };
@@ -172,9 +145,6 @@ export async function analyzeBodyScanSafely(imagesBase64: string[]): Promise<Sca
 
   } catch (err) {
     const error = err as Error;
-    if (error.name === 'AbortError') {
-      return { success: false, error: 'Scan timed out due to a slow connection.' };
-    }
     return { success: false, error: error.message || 'An unexpected error occurred.' };
   }
 }

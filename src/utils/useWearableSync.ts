@@ -40,6 +40,14 @@ export function useWearableSync() {
     wearableSyncService.connectDevice(dev);
   }, []);
 
+  const connectWebBluetooth = useCallback(async (acceptAllDevicesFallback = false) => {
+    return await wearableSyncService.connectWebBluetooth(acceptAllDevicesFallback);
+  }, []);
+
+  const disconnectWebBluetooth = useCallback(async () => {
+    await wearableSyncService.disconnectWebBluetooth();
+  }, []);
+
   const requestPermissions = useCallback(async () => {
     return await wearableSyncService.requestUniversalHealthPermissions();
   }, []);
@@ -57,6 +65,8 @@ export function useWearableSync() {
     userHealthMetrics,
     toggleSimulation,
     connectDevice,
+    connectWebBluetooth,
+    disconnectWebBluetooth,
     requestPermissions,
     fetchHealthMetrics,
     service: wearableSyncService,

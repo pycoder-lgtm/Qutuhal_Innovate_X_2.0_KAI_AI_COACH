@@ -201,8 +201,8 @@ export interface UserHealthMetrics {
 }
 
 export interface WatchDevice {
-  name: string; // 'Apple Watch', 'Galaxy Watch', 'Garmin', 'Simulated Watch'
-  platform: 'ios' | 'android' | 'mock';
+  name: string; // 'Apple Watch', 'Galaxy Watch', 'Garmin', 'Polar HRM', 'Bluetooth Watch'
+  platform: 'ios' | 'android' | 'mock' | 'bluetooth' | 'web';
 }
 
 export interface BodyScanAnalysis {

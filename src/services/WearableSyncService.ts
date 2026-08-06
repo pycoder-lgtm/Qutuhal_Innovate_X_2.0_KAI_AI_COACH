@@ -28,29 +28,34 @@ class WearableSyncService {
   private isSimulating = false;
   private isListening = false;
 
+  // Web Bluetooth GATT References
+  private connectedBluetoothDevice: any = null;
+  private gattServer: any = null;
+  private hrCharacteristic: any = null;
+
   private healthPermissionStatus: HealthPermissionStatus = 'unprompted';
   private userHealthMetrics: UserHealthMetrics = {
-    stepCount: 7420,
-    heartRate: 132,
+    stepCount: 0,
+    heartRate: null,
     sleepHours: 7.5,
-    activeCalories: 380,
-    connectedDeviceName: 'Apple Health / Apple Watch',
+    activeCalories: 0,
+    connectedDeviceName: 'No Device Connected',
     lastSyncedAt: new Date().toLocaleTimeString(),
   };
 
   private currentDevice: WatchDevice = {
-    name: 'Simulated Watch',
-    platform: 'mock',
+    name: 'Bluetooth HR Device / Watch',
+    platform: 'bluetooth',
   };
 
-  private currentStatus: WatchConnectionStatus = 'simulated';
+  private currentStatus: WatchConnectionStatus = 'disconnected';
 
   private currentBiometrics: WearableBiometrics = {
-    heartRate: 138,
-    activeCalories: 185,
-    stepCount: 4250,
-    exerciseZone: 'MODERATE',
-    targetMusicBpm: 128,
+    heartRate: null,
+    activeCalories: 0,
+    stepCount: 0,
+    exerciseZone: 'REST',
+    targetMusicBpm: 120,
     lastSyncedAt: new Date().toLocaleTimeString(),
   };
 
@@ -97,10 +102,8 @@ class WearableSyncService {
       this.currentStatus = 'connected';
       this.initHealthConnectHooks();
     } else {
-      this.currentDevice = { name: 'Simulated Watch', platform: 'mock' };
-      this.currentStatus = 'simulated';
-      // Start simulation by default in dev mode
-      this.startSimulation();
+      this.currentDevice = { name: 'Bluetooth HR Monitor / Smartwatch', platform: 'bluetooth' };
+      this.currentStatus = 'disconnected';
     }
   }
 
@@ -278,6 +281,189 @@ class WearableSyncService {
     this.notifyBiometricsSubscribers();
   }
 
+  /**
+   * Connect real Web Bluetooth Heart Rate & Fitness device via Web Bluetooth API (navigator.bluetooth.requestDevice)
+   */
+  public async connectWebBluetooth(acceptAllDevicesFallback = false): Promise<{
+    success: boolean;
+    deviceName?: string;
+    error?: string;
+  }> {
+    if (typeof window === 'undefined' || !('bluetooth' in (navigator as any))) {
+      return {
+        success: false,
+        error: 'Web Bluetooth API is not supported by your browser. Please use Google Chrome, Microsoft Edge, or a Web Bluetooth compatible browser.',
+      };
+    }
+
+    this.currentStatus = 'connecting';
+    this.notifyBiometricsSubscribers();
+
+    try {
+      let device: any = null;
+
+      if (!acceptAllDevicesFallback) {
+        // Search for BLE devices advertising standard Heart Rate service (0x180D)
+        device = await (navigator as any).bluetooth.requestDevice({
+          filters: [
+            { services: ['heart_rate'] }
+          ],
+          optionalServices: ['battery_service', 'fitness_machine', 0x180d, 0x180f, 0x1826]
+        });
+      } else {
+        // Accept all devices fallback
+        device = await (navigator as any).bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: ['heart_rate', 'battery_service', 'fitness_machine', 0x180d, 0x180f, 0x1826]
+        });
+      }
+
+      if (!device || !device.gatt) {
+        this.currentStatus = 'disconnected';
+        this.notifyBiometricsSubscribers();
+        return { success: false, error: 'No Bluetooth device was selected.' };
+      }
+
+      this.connectedBluetoothDevice = device;
+
+      // Handle disconnection event
+      device.addEventListener('gattserverdisconnected', () => {
+        console.log('[WearableSyncService] Bluetooth device disconnected:', device.name);
+        this.currentStatus = 'disconnected';
+        this.gattServer = null;
+        this.hrCharacteristic = null;
+        this.notifyBiometricsSubscribers();
+      });
+
+      console.log(`[WearableSyncService] Connecting GATT server to BLE device: ${device.name || 'HR Device'}...`);
+      const server = await device.gatt.connect();
+      this.gattServer = server;
+
+      // Primary Heart Rate Service
+      let hrService: any = null;
+      try {
+        hrService = await server.getPrimaryService('heart_rate');
+      } catch (e) {
+        try {
+          hrService = await server.getPrimaryService(0x180d);
+        } catch (e2) {
+          console.warn('[WearableSyncService] Device connected but no primary heart_rate service found.');
+        }
+      }
+
+      if (hrService) {
+        try {
+          const characteristic = await hrService.getCharacteristic('heart_rate_measurement');
+          this.hrCharacteristic = characteristic;
+
+          await characteristic.startNotifications();
+          console.log('[WearableSyncService] Subscribed to Heart Rate GATT notifications (0x2A37).');
+
+          characteristic.addEventListener('characteristicvaluechanged', (event: Event) => {
+            const target = event.target as any;
+            if (target && target.value) {
+              const hr = this.parseHeartRateGatt(target.value);
+              if (hr > 0) {
+                this.updateBiometrics({ heartRate: hr });
+                this.notifyListeners({
+                  deviceName: device.name || 'Bluetooth HR Device',
+                  heartRate: hr,
+                  timestamp: Date.now(),
+                  sourcePlatform: 'WebBridge',
+                });
+              }
+            }
+          });
+        } catch (charErr) {
+          console.warn('[WearableSyncService] Could not subscribe to heart_rate_measurement characteristic:', charErr);
+        }
+      }
+
+      // Read Battery Service optional
+      try {
+        const batteryService = await server.getPrimaryService('battery_service');
+        const batteryChar = await batteryService.getCharacteristic('battery_level');
+        const batteryVal = await batteryChar.readValue();
+        const battLevel = batteryVal.getUint8(0);
+        console.log(`[WearableSyncService] Device battery level: ${battLevel}%`);
+      } catch (battErr) {
+        // Battery service optional
+      }
+
+      if (this.isSimulating) {
+        this.stopSimulation();
+      }
+
+      const deviceName = device.name || 'Bluetooth Heart Rate Monitor';
+      this.currentDevice = {
+        name: deviceName,
+        platform: 'bluetooth',
+      };
+      this.currentStatus = 'connected';
+      this.healthPermissionStatus = 'granted';
+
+      this.userHealthMetrics = {
+        ...this.userHealthMetrics,
+        connectedDeviceName: deviceName,
+        heartRate: this.currentBiometrics.heartRate,
+        lastSyncedAt: new Date().toLocaleTimeString(),
+      };
+
+      this.notifyBiometricsSubscribers();
+      this.notifyHealthSubscribers();
+
+      return {
+        success: true,
+        deviceName,
+      };
+
+    } catch (err: any) {
+      console.error('[WearableSyncService] Web Bluetooth connection failed:', err);
+      this.currentStatus = 'disconnected';
+      this.notifyBiometricsSubscribers();
+
+      let errorMsg = err.message || 'Bluetooth connection failed.';
+      if (err.name === 'NotFoundError') {
+        errorMsg = 'Device pairing cancelled or no Bluetooth device was selected.';
+      } else if (err.name === 'SecurityError') {
+        errorMsg = 'Bluetooth access blocked by browser security settings.';
+      }
+
+      return {
+        success: false,
+        error: errorMsg,
+      };
+    }
+  }
+
+  public async disconnectWebBluetooth(): Promise<void> {
+    if (this.hrCharacteristic) {
+      try {
+        await this.hrCharacteristic.stopNotifications();
+      } catch (e) {}
+      this.hrCharacteristic = null;
+    }
+    if (this.gattServer && this.gattServer.connected) {
+      this.gattServer.disconnect();
+      this.gattServer = null;
+    }
+    if (this.connectedBluetoothDevice) {
+      this.connectedBluetoothDevice = null;
+    }
+    this.currentStatus = 'disconnected';
+    this.notifyBiometricsSubscribers();
+  }
+
+  private parseHeartRateGatt(dataView: DataView): number {
+    const flags = dataView.getUint8(0);
+    const rate16Bits = (flags & 0x01) !== 0;
+    if (rate16Bits) {
+      return dataView.getUint16(1, true);
+    } else {
+      return dataView.getUint8(1);
+    }
+  }
+
   public updateBiometrics(data: Partial<WearableBiometrics>) {
     const hr = data.heartRate !== undefined ? data.heartRate : this.currentBiometrics.heartRate;
     const activeCalories = data.activeCalories !== undefined ? data.activeCalories : this.currentBiometrics.activeCalories;
@@ -371,23 +557,14 @@ class WearableSyncService {
       };
       this.currentStatus = 'connected';
     } else {
-      // Web Preview / Simulator
-      console.log('[WearableSyncService] Web preview detected - auto-granting simulator health permissions.');
-      this.healthPermissionStatus = 'granted';
-      const mockDeviceName = 'Apple Health / Apple Watch';
-      this.userHealthMetrics = {
-        stepCount: 7420,
-        heartRate: 132,
-        sleepHours: 7.5,
-        activeCalories: 380,
-        connectedDeviceName: mockDeviceName,
-        lastSyncedAt: new Date().toLocaleTimeString(),
-      };
-      this.currentDevice = {
-        name: mockDeviceName,
-        platform: 'mock',
-      };
-      this.currentStatus = 'simulated';
+      // Web Environment: Trigger Web Bluetooth Connection
+      console.log('[WearableSyncService] Web environment detected - launching Web Bluetooth requestDevice flow...');
+      const btResult = await this.connectWebBluetooth();
+      if (btResult.success) {
+        this.healthPermissionStatus = 'granted';
+      } else {
+        console.warn('[WearableSyncService] Web Bluetooth connection skipped or failed:', btResult.error);
+      }
     }
 
     this.notifyHealthSubscribers();
