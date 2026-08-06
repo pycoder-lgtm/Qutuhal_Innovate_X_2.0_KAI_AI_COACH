@@ -804,9 +804,6 @@ export default function App() {
 
       {/* Main Content Pane */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
-        
-        {/* Wearable Biometric Status Bar Banner (Always Visible) */}
-        <WearableStatusBar className="mb-6" />
 
         {/* Connection/Plan error banner */}
         {errorText && (
@@ -834,6 +831,8 @@ export default function App() {
           </div>
         ) : (
           <div>
+            {/* Wearable Biometric Status Bar Banner (Visible after user registers profile) */}
+            <WearableStatusBar className="mb-6" />
             {activeTab === 'today' && (
               <Dashboard 
                 profile={profile}

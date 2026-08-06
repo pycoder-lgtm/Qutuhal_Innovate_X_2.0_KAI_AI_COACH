@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useWearableSync } from '../utils/useWearableSync';
 import {
   Watch, Heart, Activity, Footprints,
-  X, RefreshCw, Zap, Radio, AlertCircle, Unplug
+  X, RefreshCw, Zap, Radio, AlertCircle, Unplug, ExternalLink
 } from 'lucide-react';
 
 interface SmartwatchConnectModalProps {
@@ -22,10 +22,12 @@ export const SmartwatchConnectModal: React.FC<SmartwatchConnectModalProps> = ({
     userHealthMetrics,
     connectWebBluetooth,
     disconnectWebBluetooth,
+    toggleSimulation,
   } = useWearableSync();
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const isIframe = typeof window !== 'undefined' && window.self !== window.top;
 
   const handleConnectBluetooth = async (acceptAll = false) => {
     setIsLoading(true);
@@ -130,11 +132,34 @@ export const SmartwatchConnectModal: React.FC<SmartwatchConnectModalProps> = ({
 
               {/* Error Alert Box */}
               {errorMessage && (
-                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
-                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <span className="font-bold block">Bluetooth Status Note:</span>
-                    <span>{errorMessage}</span>
+                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs space-y-2">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <span className="font-bold block">Bluetooth Permissions Note:</span>
+                      <span>{errorMessage}</span>
+                    </div>
+                  </div>
+                  <div className="pt-1 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => window.open(window.location.href, '_blank')}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-[11px] flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Open App in New Tab
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggleSimulation(true);
+                        onClose();
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold font-mono text-[11px] flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-amber-400" />
+                      Enable Simulated Watch
+                    </button>
                   </div>
                 </div>
               )}
@@ -160,14 +185,38 @@ export const SmartwatchConnectModal: React.FC<SmartwatchConnectModalProps> = ({
                   )}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleConnectBluetooth(true)}
-                  disabled={isLoading}
-                  className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold font-mono text-xs transition cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <span>Search All Bluetooth Devices (Fallback)</span>
-                </button>
+                {isIframe && (
+                  <button
+                    type="button"
+                    onClick={() => window.open(window.location.href, '_blank')}
+                    className="w-full py-2.5 px-4 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold font-mono text-xs transition cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <ExternalLink className="w-4 h-4 text-cyan-400" />
+                    <span>Open App in New Tab to Pair Bluetooth</span>
+                  </button>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleConnectBluetooth(true)}
+                    disabled={isLoading}
+                    className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold font-mono text-[11px] transition cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>All BLE Devices</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toggleSimulation(true);
+                      onClose();
+                    }}
+                    className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-amber-300 font-bold font-mono text-[11px] transition cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Demo Watch</span>
+                  </button>
+                </div>
 
                 <button
                   type="button"

@@ -300,23 +300,11 @@ class WearableSyncService {
     this.notifyBiometricsSubscribers();
 
     try {
-      let device: any = null;
-
-      if (!acceptAllDevicesFallback) {
-        // Search for BLE devices advertising standard Heart Rate service (0x180D)
-        device = await (navigator as any).bluetooth.requestDevice({
-          filters: [
-            { services: ['heart_rate'] }
-          ],
-          optionalServices: ['battery_service', 'fitness_machine', 0x180d, 0x180f, 0x1826]
-        });
-      } else {
-        // Accept all devices fallback
-        device = await (navigator as any).bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: ['heart_rate', 'battery_service', 'fitness_machine', 0x180d, 0x180f, 0x1826]
-        });
-      }
+      // Use acceptAllDevices: true to show all nearby Bluetooth devices without filtering
+      const device: any = await (navigator as any).bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: ['heart_rate', 'battery_service', 'fitness_machine', 0x180d, 0x180f, 0x1826]
+      });
 
       if (!device || !device.gatt) {
         this.currentStatus = 'disconnected';
@@ -423,10 +411,10 @@ class WearableSyncService {
       this.notifyBiometricsSubscribers();
 
       let errorMsg = err.message || 'Bluetooth connection failed.';
-      if (err.name === 'NotFoundError') {
+      if (err.name === 'SecurityError' || (err.message && (err.message.includes('permissions policy') || err.message.includes('disallowed')))) {
+        errorMsg = 'Web Bluetooth is restricted inside preview iframes by browser security policy. Please click "Open in New Tab" to scan and connect real Bluetooth hardware in a full window, or use "Simulated Watch Mode" below.';
+      } else if (err.name === 'NotFoundError') {
         errorMsg = 'Device pairing cancelled or no Bluetooth device was selected.';
-      } else if (err.name === 'SecurityError') {
-        errorMsg = 'Bluetooth access blocked by browser security settings.';
       }
 
       return {
