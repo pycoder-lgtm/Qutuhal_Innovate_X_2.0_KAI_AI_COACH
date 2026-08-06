@@ -1355,24 +1355,24 @@ function computeProfileSmartDefaults(profile: any) {
     valid_full_body: true,
     rejection_reason: null,
     postureAssessment: {
-      headNeck: "Neutral head position relative to cervical spine with minor forward tilt.",
-      shoulders: "Symmetrical shoulder girdle height with mild scapular protraction.",
-      pelvisSpine: "Neutral pelvic tilt with balanced lumbar arch and core engagement.",
-      kneesAnkles: "Neutral patellar tracking and stable ankle arches.",
+      headNeck: "Head and neck look mostly straight and natural.",
+      shoulders: "Shoulders are balanced and fairly level.",
+      pelvisSpine: "Back and waist are well aligned.",
+      kneesAnkles: "Knees and ankles stand sturdy.",
       identifiedDeviations: [
-        "Mild Forward Head Posture",
-        "Mild Anterior Pelvic Tilt"
+        "Slight Shoulder Unbalance",
+        "Minor Back Tension"
       ],
       exerciseModifications: [
-        "Replace heavy lumbar-loading lifts with chest-supported rowing & split-stance squat variations.",
-        "Include face pulls and chin tucks to reinforce upper back alignment."
+        "Do light daily shoulder stretches and gentle walks.",
+        "Keep your chest tall and open when sitting or standing."
       ]
     },
-    frameType: "Athletic Mesomorph Baseline",
-    frontAngleReport: "Balanced chest and clavicle ratio with symmetrical anterior deltoid engagement.",
-    sideAngleReport: "Optimal spinal alignment with minor postural tightness in upper traps and hip flexors.",
-    backAngleReport: "Strong latissimus dorsi foundation and balanced scapular positioning.",
-    analysis: `Based on your physical parameters, you display a balanced frame with a calculated BMR of ${bmr} kcal and TDEE of ${tdee} kcal. We will optimize your protein partitioning (${protein}g/day) and progressive overload stimulus to sculpt your aesthetic frame.`,
+    frameType: "Healthy Balanced Frame",
+    frontAngleReport: "Balanced chest and shoulders with a healthy overall frame.",
+    sideAngleReport: "Good standing posture with a natural straight back.",
+    backAngleReport: "Steady upper back alignment and balanced posture.",
+    analysis: `Your body posture looks balanced and overall frame is healthy and natural. You have a solid, healthy baseline to start your daily workouts, so keep standing tall with your shoulders relaxed and enjoy balanced, nutritious meals.`,
     predictedWeight: weight,
     predictedHeight: height,
     predictedWeightRange: `${Math.max(40, weight - 3)} - ${weight + 3} kg`,
@@ -1872,17 +1872,19 @@ If BOTH conditions are met:
 THEN: Instantly scale Cm into the 1.45 - 1.70 range to accurately hit 100 kg - 125+ kg, regardless of dark or loose clothing.
 
 --------------------------------------------------
-3. SOMATOTYPE & POSTURE RULES
+3. SIMPLE LANGUAGE & POSTURE SCAN RULES
 --------------------------------------------------
-- SOMATOTYPE OVERRIDE: Do NOT classify a user as "Mesomorph" based solely on broad frontal shoulders. You MUST cross-reference side profile photos. If abdominal depth exceeds chest depth, classify as "Endomorph".
-- POSTURE SCAN: Identify forward head posture, shoulder rounding, or anterior pelvic tilt from the side and back profiles.
+- CRITICAL REQUIREMENT FOR 'analysis': The 'analysis' summary MUST be written in VERY SIMPLE, friendly, everyday language in EXACTLY ONE SHORT PARAGRAPH (2 to 4 simple sentences maximum).
+- YOU ARE STRICTLY FORBIDDEN from using complex, medical, or technical jargon words like: 'endomorph', 'ectomorph', 'mesomorph', 'anterior pelvic tilt', 'scapular protraction', 'cervical spine', 'lumbar', 'BMR', 'TDEE', 'hypertrophy', 'partitioning', 'somatotype', etc.
+- Use simple, everyday terms that anyone already knows (e.g. 'good standing posture', 'straight back', 'slight shoulder tilt', 'healthy overall build').
+- 'frameType' should be simple (e.g. "Healthy Balanced Frame", "Strong Athletic Frame").
 
 --------------------------------------------------
 4. STRICT OUTPUT INSTRUCTIONS
 --------------------------------------------------
 - Return ONLY valid JSON matching the defined schema.
 - All weight values MUST be integer numbers. Perform internal frame density calculations silently and return calculated_weight_kg.
-- Keep posture summaries concise, direct, and actionable.`,
+- Keep the 'analysis' field strictly to ONE simple, friendly paragraph.`,
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,

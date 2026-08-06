@@ -37,6 +37,9 @@ const getTodayDateString = () => {
   return [year, month.padStart(2, '0'), day.padStart(2, '0')].join('-');
 };
 
+// Toggle flag to easily bring back the smartwatch feature whenever requested
+const SHOW_SMARTWATCH_FEATURE = true;
+
 export default function App() {
   const todayDateStr = getTodayDateString();
 
@@ -65,7 +68,7 @@ export default function App() {
     }
   });
 
-  const [activeTab, setActiveTab] = useState<'today' | 'chat' | 'metrics' | 'achievements' | 'profile_edit'>('today');
+  const [activeTab, setActiveTab] = useState<'home' | 'coach' | 'me' | 'today' | 'chat' | 'metrics' | 'achievements' | 'profile_edit'>('home');
 
   const [selectedDay, setSelectedDay] = useState<string>(() => {
     const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -710,59 +713,37 @@ export default function App() {
               <>
                 <nav className="flex items-center bg-slate-950 border border-slate-800 p-1 rounded-xl">
                   <button
-                    onClick={() => setActiveTab('today')}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition ${
-                      activeTab === 'today'
+                    onClick={() => setActiveTab('home')}
+                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs md:text-sm font-bold transition cursor-pointer ${
+                      activeTab === 'home' || activeTab === 'today'
                         ? 'bg-slate-900 text-sky-400 shadow-md border border-slate-800'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    <CheckCircle className="w-4 h-4 text-sky-500" />
-                    <span className="hidden sm:inline">Daily Plan</span>
+                    <Dumbbell className="w-4 h-4 text-sky-400" />
+                    <span>Home</span>
                   </button>
                   <button
-                    onClick={() => setActiveTab('chat')}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition ${
-                      activeTab === 'chat'
+                    onClick={() => setActiveTab('coach')}
+                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs md:text-sm font-bold transition cursor-pointer ${
+                      activeTab === 'coach' || activeTab === 'chat'
                         ? 'bg-slate-900 text-sky-400 shadow-md border border-slate-800'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    <MessageSquare className="w-4 h-4 text-sky-500" />
-                    <span className="hidden sm:inline">Coach Chat</span>
+                    <MessageSquare className="w-4 h-4 text-sky-400" />
+                    <span>Coach</span>
                   </button>
                   <button
-                    onClick={() => setActiveTab('metrics')}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition ${
-                      activeTab === 'metrics'
+                    onClick={() => setActiveTab('me')}
+                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs md:text-sm font-bold transition cursor-pointer ${
+                      activeTab === 'me' || activeTab === 'profile_edit' || activeTab === 'metrics' || activeTab === 'achievements'
                         ? 'bg-slate-900 text-sky-400 shadow-md border border-slate-800'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    <LineChart className="w-4 h-4 text-sky-500" />
-                    <span className="hidden sm:inline">Progress Log</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('achievements')}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition ${
-                      activeTab === 'achievements'
-                        ? 'bg-slate-900 text-sky-400 shadow-md border border-slate-800'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <Trophy className="w-4 h-4 text-sky-500" />
-                    <span className="hidden sm:inline">Achievements</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('profile_edit')}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition ${
-                      activeTab === 'profile_edit'
-                        ? 'bg-slate-900 text-sky-400 shadow-md border border-slate-800'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <Settings className="w-4 h-4 text-sky-500" />
-                    <span className="hidden sm:inline">Profile</span>
+                    <UserIcon className="w-4 h-4 text-sky-400" />
+                    <span>Me</span>
                   </button>
                 </nav>
 
@@ -771,7 +752,7 @@ export default function App() {
                     <button
                       onClick={handleSignOut}
                       title="Sign Out (Your data remains safely stored in the database)"
-                      className="px-3 py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0"
+                      className="px-3 py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 cursor-pointer"
                     >
                       <LogOut className="w-4 h-4 text-sky-400" />
                       <span className="hidden sm:inline">Sign Out</span>
@@ -780,7 +761,7 @@ export default function App() {
                     <button
                       onClick={handleHeaderGoogleLogin}
                       title="Sign In with Google to auto-restore your saved data"
-                      className="px-3 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md shrink-0"
+                      className="px-3 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md shrink-0 cursor-pointer"
                     >
                       <LogIn className="w-4 h-4" />
                       <span className="hidden sm:inline">Sign In</span>
@@ -790,10 +771,10 @@ export default function App() {
                   <button
                     onClick={handleOpenResetModal}
                     title="Reset & Restart All Data (Permanently erases data)"
-                    className="p-2.5 text-slate-500 hover:text-red-400 hover:bg-slate-900 rounded-xl transition flex items-center gap-1.5"
+                    className="p-2.5 text-slate-500 hover:text-red-400 hover:bg-slate-900 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
                   >
                     <RotateCcw className="w-5 h-5 text-slate-400 hover:text-red-400" />
-                    <span className="hidden lg:inline text-xs font-semibold text-slate-400 hover:text-red-400">Reset & Restart</span>
+                    <span className="hidden lg:inline text-xs font-semibold text-slate-400 hover:text-red-400">Reset</span>
                   </button>
                 </div>
               </>
@@ -803,7 +784,7 @@ export default function App() {
       </header>
 
       {/* Main Content Pane */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 pb-24">
 
         {/* Connection/Plan error banner */}
         {errorText && (
@@ -831,9 +812,8 @@ export default function App() {
           </div>
         ) : (
           <div>
-            {/* Wearable Biometric Status Bar Banner (Visible after user registers profile) */}
-            <WearableStatusBar className="mb-6" />
-            {activeTab === 'today' && (
+            {/* TAB 1: HOME (One-Button Dashboard) */}
+            {(activeTab === 'home' || activeTab === 'today') && (
               <Dashboard 
                 profile={profile}
                 plan={currentPlan}
@@ -847,64 +827,118 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'chat' && (
-              <CoachChat 
-                profile={profile}
-                plan={currentPlan}
-                messages={chatMessages}
-                onSendMessage={handleSendMessage}
-                loading={loadingChat}
-                onGeneratePlan={handleGeneratePlan}
-                loadingPlan={loadingPlan}
-                onAcceptWeeklyPlan={handleAcceptWeeklyPlan}
-              />
+            {/* TAB 2: COACH (Kai AI Chat + Smartwatch Bluetooth Connection) */}
+            {(activeTab === 'coach' || activeTab === 'chat') && (
+              <div className="space-y-6">
+                <WearableStatusBar className="shadow-lg" />
+                <CoachChat 
+                  profile={profile}
+                  plan={currentPlan}
+                  messages={chatMessages}
+                  onSendMessage={handleSendMessage}
+                  loading={loadingChat}
+                  onGeneratePlan={handleGeneratePlan}
+                  loadingPlan={loadingPlan}
+                  onAcceptWeeklyPlan={handleAcceptWeeklyPlan}
+                />
+              </div>
             )}
 
-            {activeTab === 'metrics' && (
-              <MetricsTracker 
-                profile={profile}
-                plan={currentPlan}
-                historyLogs={historyLogs}
-                onAddProgressLog={handleAddProgressLog}
-                onDeleteProgressLog={handleDeleteProgressLog}
-              />
-            )}
-
-            {activeTab === 'achievements' && (
-              <AchievementsTab
-                profile={profile}
-                plan={currentPlan}
-                historyLogs={historyLogs}
-              />
-            )}
-
-            {activeTab === 'profile_edit' && (
-              <div className="max-w-2xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4">
-                <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg sm:text-xl font-bold text-white uppercase tracking-tight font-display">Coach Kai Settings & Biometrics</h2>
-                    <p className="text-[11px] text-slate-400 mt-0.5">360° Posture Calibration, Biomechanical Triage & Metabolic Logs</p>
+            {/* TAB 3: ME (Profile, Progress Photos & Deep-Dive Data) */}
+            {(activeTab === 'me' || activeTab === 'profile_edit' || activeTab === 'metrics' || activeTab === 'achievements') && (
+              <div className="max-w-3xl mx-auto space-y-8">
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4">
+                  <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-lg sm:text-xl font-bold text-white uppercase tracking-tight font-display">Your Profile & Body Analysis</h2>
+                      <p className="text-xs text-slate-400 mt-0.5">Manage biometrics, scan photos, and deep-dive data</p>
+                    </div>
                   </div>
-                  <div className="hidden sm:block">
-                    <span className="text-[10px] font-extrabold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-1 rounded-full uppercase tracking-wider">
-                      Active Profile
-                    </span>
-                  </div>
+
+                  <BodyScanMobileView 
+                    profile={profile}
+                    user={user}
+                    onSignOut={handleSignOut}
+                    onHeaderGoogleLogin={handleHeaderGoogleLogin}
+                    onOpenResetModal={handleOpenResetModal}
+                    onUpdateProfile={(updated) => setProfile(updated)}
+                  />
                 </div>
 
-                {/* Refactored Mobile Tabbed / Segmented View with Accordions and Horizontal Carousels */}
-                <BodyScanMobileView 
-                  profile={profile}
-                  user={user}
-                  onSignOut={handleSignOut}
-                  onHeaderGoogleLogin={handleHeaderGoogleLogin}
-                  onOpenResetModal={handleOpenResetModal}
-                />
+                {/* Sub-sections for Progress Tracking & Achievements */}
+                <div className="space-y-6">
+                  <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl">
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4 border-b border-slate-800 pb-2">
+                      Progress Logs & History
+                    </h3>
+                    <MetricsTracker 
+                      profile={profile}
+                      plan={currentPlan}
+                      historyLogs={historyLogs}
+                      onAddProgressLog={handleAddProgressLog}
+                      onDeleteProgressLog={handleDeleteProgressLog}
+                    />
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl">
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4 border-b border-slate-800 pb-2">
+                      Achievements & Milestones
+                    </h3>
+                    <AchievementsTab
+                      profile={profile}
+                      plan={currentPlan}
+                      historyLogs={historyLogs}
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>
         )}
       </main>
+
+      {/* 3-Tab Bottom Navigation Bar */}
+      {profile && (
+        <nav className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 px-6 py-2 shadow-2xl">
+          <div className="max-w-md mx-auto flex items-center justify-around">
+            <button
+              onClick={() => setActiveTab('home')}
+              className={`flex flex-col items-center gap-1 px-5 py-1.5 rounded-2xl transition cursor-pointer ${
+                activeTab === 'home' || activeTab === 'today'
+                  ? 'text-sky-400 font-extrabold'
+                  : 'text-slate-400 hover:text-slate-200 font-semibold'
+              }`}
+            >
+              <Dumbbell className="w-5 h-5" />
+              <span className="text-[10px] uppercase tracking-wider">Home</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('coach')}
+              className={`flex flex-col items-center gap-1 px-5 py-1.5 rounded-2xl transition cursor-pointer ${
+                activeTab === 'coach' || activeTab === 'chat'
+                  ? 'text-sky-400 font-extrabold'
+                  : 'text-slate-400 hover:text-slate-200 font-semibold'
+              }`}
+            >
+              <MessageSquare className="w-5 h-5" />
+              <span className="text-[10px] uppercase tracking-wider">Coach</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('me')}
+              className={`flex flex-col items-center gap-1 px-5 py-1.5 rounded-2xl transition cursor-pointer ${
+                activeTab === 'me' || activeTab === 'profile_edit' || activeTab === 'metrics' || activeTab === 'achievements'
+                  ? 'text-sky-400 font-extrabold'
+                  : 'text-slate-400 hover:text-slate-200 font-semibold'
+              }`}
+            >
+              <UserIcon className="w-5 h-5" />
+              <span className="text-[10px] uppercase tracking-wider">Me</span>
+            </button>
+          </div>
+        </nav>
+      )}
 
       {/* Reset Confirmation Modal */}
       {showResetModal && (

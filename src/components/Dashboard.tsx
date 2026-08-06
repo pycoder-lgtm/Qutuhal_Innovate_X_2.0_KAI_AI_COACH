@@ -11,7 +11,7 @@ import {
   Circle, ChevronDown, ChevronUp, Sparkles, AlertCircle, RefreshCw,
   Plus, Minus, Info, CalendarClock, Search, Database, PlusCircle, Check,
   Bell, AlarmClock, Volume2, VolumeX, Video, ExternalLink, TrendingUp, Zap,
-  Trophy, Award, Crown, ShieldCheck, Star, Target, Medal
+  Trophy, Award, Crown, ShieldCheck, Star, Target, Medal, Play, ChevronRight
 } from 'lucide-react';
 // @ts-expect-error - dynamic image asset
 import muscleAnatomyBase from '../assets/images/muscle_anatomy_base_1784623731039.jpg';
@@ -554,6 +554,49 @@ export default function Dashboard({
 
   return (
     <div className="space-y-8">
+      {/* Massive "Start Today's Plan" One-Button Hero Dashboard */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-slate-800 p-6 sm:p-8 rounded-3xl shadow-2xl space-y-6 text-center relative overflow-hidden">
+        <div className="absolute -right-12 -bottom-12 w-48 h-48 bg-sky-500/10 rounded-full blur-2xl" />
+        <div className="absolute -left-12 -top-12 w-48 h-48 bg-teal-500/10 rounded-full blur-2xl" />
+
+        <div className="max-w-md mx-auto space-y-2 relative z-10">
+          <span className="text-[11px] font-extrabold uppercase tracking-widest text-sky-400 bg-sky-500/10 border border-sky-500/20 px-3.5 py-1 rounded-full inline-block">
+            Today's Daily Plan
+          </span>
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            Welcome, {profile.name}! 👋
+          </h1>
+          <p className="text-xs text-slate-300">
+            Your daily workout and meal plan are ready. Tap below to begin!
+          </p>
+        </div>
+
+        {/* MASSIVE ONE-BUTTON PRIMARY ACTION */}
+        <div className="relative z-10">
+          <button
+            onClick={() => {
+              if (!plan) {
+                onGeneratePlan();
+              } else {
+                const el = document.getElementById("today-workout-section");
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth' });
+                }
+              }
+            }}
+            disabled={loading}
+            className="w-full max-w-lg mx-auto py-5 sm:py-6 px-8 rounded-3xl bg-gradient-to-r from-sky-400 via-sky-500 to-teal-400 hover:from-sky-300 hover:to-teal-300 text-slate-950 font-black text-xl sm:text-2xl uppercase tracking-wider shadow-2xl shadow-sky-500/30 hover:shadow-sky-500/50 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3.5 cursor-pointer border-2 border-white/20 disabled:opacity-50"
+          >
+            {loading ? (
+              <RefreshCw className="w-8 h-8 animate-spin text-slate-950" />
+            ) : (
+              <Play className="w-8 h-8 fill-slate-950 stroke-slate-950" />
+            )}
+            <span>{loading ? "Generating Plan..." : "Start Today's Plan"}</span>
+          </button>
+        </div>
+      </div>
+
       {/* Weekly Schedule Planner Split */}
       <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">

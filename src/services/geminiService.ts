@@ -48,15 +48,16 @@ async function compressImageBase64(base64Data: string, maxWidth = 800): Promise<
 
 function parseScanAnalysisResponse(rawText: string): BodyScanAnalysis {
   let bodyFatEst = 15;
-  let postureScore = 82;
-  let postureNotes = "Spine alignment good. Slight forward head displacement.";
-  let shoulderSymmetry = "Shoulders level within normal parameters.";
-  let pelvicTilt = "Neutral pelvic tilt observed.";
-  let muscleHighlights: string[] = ["Rear Deltoids", "Core Stability", "Upper Traps"];
+  let postureScore = 85;
+  let summaryParagraph = "Your body posture looks balanced and overall shape is healthy and natural. You have a good standing posture, so keep your shoulders relaxed, stand tall, and stay active with regular daily movement.";
+  let postureNotes = "Good standing posture with balanced shoulders and neck.";
+  let shoulderSymmetry = "Shoulders are level and balanced.";
+  let pelvicTilt = "Standing straight with normal natural alignment.";
+  let muscleHighlights: string[] = ["Chest", "Back", "Core"];
   let recommendations: string[] = [
-    "Perform doorway chest stretches twice daily.",
-    "Add face pulls to your pulling workout routines.",
-    "Focus on glute bridge activations prior to squatting."
+    "Stand tall with relaxed shoulders.",
+    "Do light daily walking and stretching.",
+    "Keep your core engaged when sitting."
   ];
 
   try {
@@ -65,6 +66,7 @@ function parseScanAnalysisResponse(rawText: string): BodyScanAnalysis {
       const parsed = JSON.parse(jsonMatch[0]);
       if (parsed.bodyFatEst) bodyFatEst = Number(parsed.bodyFatEst);
       if (parsed.postureScore) postureScore = Number(parsed.postureScore);
+      if (parsed.summaryParagraph) summaryParagraph = String(parsed.summaryParagraph);
       if (parsed.postureNotes) postureNotes = String(parsed.postureNotes);
       if (parsed.shoulderSymmetry) shoulderSymmetry = String(parsed.shoulderSymmetry);
       if (parsed.pelvicTilt) pelvicTilt = String(parsed.pelvicTilt);
@@ -75,11 +77,17 @@ function parseScanAnalysisResponse(rawText: string): BodyScanAnalysis {
     console.warn("Using text fallback for scan analysis parsing");
   }
 
+  // Ensure summaryParagraph is clean and present
+  if (!summaryParagraph || summaryParagraph.length < 10) {
+    summaryParagraph = `${postureNotes} ${shoulderSymmetry} ${pelvicTilt}`.replace(/\s+/g, ' ').trim();
+  }
+
   const currentDate = new Date().toISOString().split('T')[0];
 
   return {
     id: `scan_${Date.now()}`,
     date: currentDate,
+    summaryParagraph: summaryParagraph,
     bodyFatEst: bodyFatEst,
     postureScore: postureScore,
     postureNotes: postureNotes,
@@ -87,7 +95,7 @@ function parseScanAnalysisResponse(rawText: string): BodyScanAnalysis {
     pelvicTilt: pelvicTilt,
     muscleHighlights: muscleHighlights,
     recommendations: recommendations,
-    rawAnalysisText: rawText
+    rawAnalysisText: summaryParagraph
   };
 }
 
@@ -122,7 +130,7 @@ export async function analyzeBodyScanSafely(imagesBase64: string[]): Promise<Sca
       };
     });
 
-    const systemPrompt = "You are Coach Kai, an elite biomechanics AI coach. Analyze the provided body posture photos (Front, Back, Left, Right). Provide a complete body composition and alignment assessment. End your response with a JSON block in this exact format: { \"bodyFatEst\": 14.5, \"postureScore\": 85, \"postureNotes\": \"Good head-to-spine alignment.\", \"shoulderSymmetry\": \"Left shoulder slightly elevated.\", \"pelvicTilt\": \"Slight anterior pelvic tilt observed.\", \"muscleHighlights\": [\"Upper Back\", \"Core\"], \"recommendations\": [\"Perform doorway chest stretches twice daily.\"] }";
+    const systemPrompt = "You are Coach Kai, a friendly fitness coach. Analyze the provided 4 body posture photos (Front, Back, Left, Right). Write your complete scan analysis result in VERY simple, friendly, everyday language in EXACTLY ONE short paragraph (2 to 4 simple sentences max). Common everyday people will use this app, so YOU ARE STRICTLY FORBIDDEN from using complex, medical, or scientific jargon words like 'endomorph', 'ectomorph', 'mesomorph', 'anterior pelvic tilt', 'scapular', 'hypertrophy', 'cervical', 'lumbar', 'BMR', 'TDEE', etc. Use simple everyday words everyone knows (e.g. 'good standing posture', 'straight back', 'slight shoulder tilt', 'healthy overall shape'). End your response with a JSON block in this exact format: { \"summaryParagraph\": \"Your posture looks balanced and overall body shape is healthy and natural. You have a good standing posture, so keep your shoulders relaxed and stay active with light daily walking and stretching.\", \"bodyFatEst\": 15, \"postureScore\": 85, \"postureNotes\": \"Good standing posture with balanced shoulders.\", \"shoulderSymmetry\": \"Shoulders are level and steady.\", \"pelvicTilt\": \"Standing straight with normal alignment.\", \"muscleHighlights\": [\"Chest\", \"Back\", \"Core\"], \"recommendations\": [\"Stand tall with relaxed shoulders.\", \"Do light daily walking and stretching.\"] }";
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.6-flash',

@@ -890,66 +890,62 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                     />
                     {errors.age && <p className="text-red-400 text-xs mt-1">{errors.age}</p>}
                   </div>
-                </div>                {/* 4-Angle Photo Portfolio Upload Grid */}
+                </div>                {/* 4-Angle Photo Portfolio Upload Step-by-Step */}
                 <div className="space-y-4">
-                  <div>
-                    <div className="flex items-center justify-between gap-2">
-                      <label className="block text-sm font-bold text-slate-300 uppercase tracking-wide flex items-center gap-2">
-                        <Camera className="w-4 h-4 text-sky-400" />
-                        <span>Upload Physique Portfolio (All 4 Views Mandatory)</span>
-                      </label>
-                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-1 rounded-full">
-                        <Database className="w-3.5 h-3.5" />
-                        <span>{user ? `Cloud Database: Synced (${user.email})` : 'Cloud Database Ready'}</span>
-                      </div>
+                  {/* Friendly Kai Avatar & Conversational Header */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-sky-950/80 to-slate-950 border border-sky-500/30 flex items-start gap-3 shadow-lg">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-400 to-teal-400 flex items-center justify-center text-slate-950 font-black text-lg shrink-0 shadow-md">
+                      K
                     </div>
-                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                      For Coach Kai to construct a comprehensive aesthetic posture profile and accurately predict your frame structure, please upload or capture views of your body. <strong>All Front, Left, Right, and Back views are strictly mandatory</strong> to enable high-fidelity 360-degree calibration.
-                    </p>
-                    <div className="mt-2.5 p-2.5 bg-amber-500/10 border border-amber-500/25 rounded-xl text-amber-300 text-[11px] font-semibold flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
-                      <span><strong>CRITICAL:</strong> Please provide a <u>FULL-BODY photo from head to toe</u>. Photos that crop out the head, hips, or feet are not suitable for posture calibration.</span>
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-white">
+                        Hi, I'm Kai! Let's get your baseline. Let's start with a quick front photo.
+                      </p>
+                      <p className="text-xs text-slate-300">
+                        Take full-body photos (head-to-toe) so our AI Body Scan can create your personalized body type results.
+                      </p>
                     </div>
+                  </div>
 
-                    {/* REJECTION WARNING BANNER */}
-                    {formData.valid_full_body === false && (
-                      <div className="mt-3 p-3.5 bg-red-950/80 border-2 border-red-500/80 rounded-2xl text-red-200 text-xs font-bold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xl animate-bounce">
-                        <div className="flex items-center gap-2.5">
-                          <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
-                          <div>
-                            <p className="text-red-300 font-extrabold uppercase tracking-wide text-xs">Photo is not suitable!</p>
-                            <p className="text-red-200/90 text-[11px] mt-0.5 font-medium">
-                              {formData.rejection_reason || 'Please give the full body of the person from head to toe. Photos cropping head, hips, or feet cannot be analyzed.'}
-                            </p>
-                          </div>
+                  {/* REJECTION WARNING BANNER */}
+                  {formData.valid_full_body === false && (
+                    <div className="p-3.5 bg-red-950/80 border-2 border-red-500/80 rounded-2xl text-red-200 text-xs font-bold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xl animate-bounce">
+                      <div className="flex items-center gap-2.5">
+                        <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+                        <div>
+                          <p className="text-red-300 font-extrabold uppercase tracking-wide text-xs">Photo is not suitable!</p>
+                          <p className="text-red-200/90 text-[11px] mt-0.5 font-medium">
+                            {formData.rejection_reason || 'Please give the full body of the person from head to toe. Photos cropping head, hips, or feet cannot be analyzed.'}
+                          </p>
                         </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {[
-                      { key: 'photoFront' as const, label: 'Front Photo', required: true, desc: 'Full standing body, head to feet, facing camera' },
-                      { key: 'photoLeft' as const, label: 'Left Profile', required: true, desc: 'Full standing left side profile, head to feet' },
-                      { key: 'photoRight' as const, label: 'Right Profile', required: true, desc: 'Full standing right side profile, head to feet' },
-                      { key: 'photoBack' as const, label: 'Back Photo', required: true, desc: 'Full standing posterior view, head to feet' }
+                      { key: 'photoFront' as const, label: '1. Front Photo', required: true, desc: 'Full standing body, head to feet, facing camera' },
+                      { key: 'photoLeft' as const, label: '2. Left Side', required: true, desc: 'Full standing left side profile, head to feet' },
+                      { key: 'photoRight' as const, label: '3. Right Side', required: true, desc: 'Full standing right side profile, head to feet' },
+                      { key: 'photoBack' as const, label: '4. Back Photo', required: true, desc: 'Full standing back view, head to feet' }
                     ].map((item) => {
                       const photoUrl = formData[item.key];
                       return (
                         <div 
                           key={item.key}
-                          className={`border rounded-2xl bg-slate-950 p-3.5 flex flex-col justify-between min-h-[300px] sm:min-h-[350px] relative transition hover:border-slate-700 ${
+                          className={`border rounded-2xl bg-slate-950 p-3.5 flex flex-col justify-between min-h-[280px] relative transition hover:border-slate-700 ${
                             item.required ? 'border-sky-500/40 shadow-[0_0_15px_rgba(14,165,233,0.05)]' : 'border-slate-800'
                           }`}
                         >
                           {/* Badge */}
-                          <div className="absolute top-2 left-2 z-10">
-                            <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                              item.required 
-                                ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' 
-                                : 'bg-slate-900 text-slate-500 border border-slate-800'
+                          <div className="flex items-center justify-between mb-2 z-10">
+                            <span className="text-xs font-bold text-white uppercase tracking-wide">{item.label}</span>
+                            <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                              photoUrl
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
                             }`}>
-                              {item.required ? 'Mandatory Full Body' : 'Optional'}
+                              {photoUrl ? '✓ Captured' : 'Required'}
                             </span>
                           </div>
 
@@ -1175,12 +1171,12 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                           {loadingAnalysis ? (
                             <>
                               <RefreshCw className="w-4.5 h-4.5 animate-spin" />
-                              Constructing Posture Profile...
+                              Analyzing My Body...
                             </>
                           ) : (
                             <>
                               <Sparkles className="w-4.5 h-4.5" />
-                              Calibrate Posture & Frame
+                              Analyze My Body
                             </>
                           )}
                         </button>
@@ -1191,7 +1187,7 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                       <div>
                         <div className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-widest text-sky-400 mb-2 font-display">
                           <Sparkles className="w-3.5 h-3.5" />
-                          Predicted Aesthetic Frame Report
+                          Your Body Type Results
                         </div>
                         
                         {loadingAnalysis ? (
@@ -1205,7 +1201,7 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                             {formData.frameType && (
                               <div className="inline-flex items-center gap-1.5 bg-sky-500/10 border border-sky-500/30 text-sky-400 px-3 py-1 rounded-xl text-xs font-bold font-display">
                                 <Activity className="w-3.5 h-3.5 text-sky-400" />
-                                Archetype: {formData.frameType}
+                                Body Frame: {formData.frameType}
                               </div>
                             )}
 
@@ -1274,8 +1270,8 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                               </div>
                             )}
 
-                            <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-line bg-slate-900/50 p-3.5 rounded-xl border border-slate-900/40 shadow-inner">
-                              <span className="font-bold text-sky-400 block mb-1 uppercase tracking-wider text-[10px]">Executive Summary</span>
+                            <div className="text-xs text-slate-200 leading-relaxed whitespace-pre-line bg-slate-900/80 p-4 rounded-xl border border-sky-500/20 shadow-inner">
+                              <span className="font-bold text-sky-400 block mb-1 uppercase tracking-wider text-[10px]">Simple Body Analysis</span>
                               {formData.physiqueAnalysis}
                             </div>
 

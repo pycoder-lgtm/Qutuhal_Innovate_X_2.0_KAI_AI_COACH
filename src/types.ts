@@ -208,6 +208,7 @@ export interface WatchDevice {
 export interface BodyScanAnalysis {
   id: string;
   date: string;
+  summaryParagraph?: string;
   bodyFatEst: number;
   postureScore: number;
   postureNotes: string;
