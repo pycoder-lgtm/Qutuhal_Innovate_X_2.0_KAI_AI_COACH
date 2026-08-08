@@ -443,16 +443,23 @@ class WearableSyncService {
       };
 
     } catch (err: any) {
-      console.error('[BLE] Web Bluetooth connection failed:', err);
       this.currentStatus = 'disconnected';
       this.notifyBiometricsSubscribers();
 
-      let errorMsg = err.message || 'Bluetooth connection failed.';
-      if (err.name === 'SecurityError' || (err.message && (err.message.includes('permissions policy') || err.message.includes('disallowed') || err.message.includes('iframe')))) {
+      const isUserCancellation = err?.name === 'NotFoundError' || (err?.message && (err.message.includes('cancelled') || err.message.includes('User cancelled') || err.message.includes('chooser')));
+
+      if (isUserCancellation) {
+        console.log('[BLE] Device selection cancelled by user or chooser closed.');
+      } else {
+        console.error('[BLE] Web Bluetooth connection failed:', err);
+      }
+
+      let errorMsg = err?.message || 'Bluetooth connection failed.';
+      if (err?.name === 'SecurityError' || (err?.message && (err.message.includes('permissions policy') || err.message.includes('disallowed') || err.message.includes('iframe')))) {
         errorMsg = 'Web Bluetooth is restricted inside preview iframes by browser security policy. Please click "Open App in New Tab" to scan and connect real Bluetooth hardware, or enable Simulated Watch Mode.';
-      } else if (err.message && err.message.includes('user gesture')) {
+      } else if (err?.message && err.message.includes('user gesture')) {
         errorMsg = 'Web Bluetooth requires an immediate user gesture. Please click "Scan for Heart Rate Devices" directly or open the app in a new tab.';
-      } else if (err.name === 'NotFoundError' || (err.message && err.message.includes('cancelled'))) {
+      } else if (isUserCancellation) {
         errorMsg = 'Device pairing was cancelled or no Bluetooth device was selected.';
       }
 
