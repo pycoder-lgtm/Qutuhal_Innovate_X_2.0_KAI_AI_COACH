@@ -9,10 +9,11 @@ import { UserProfile } from '../types';
 import { 
   User, Scale, Activity, Target, Utensils, ArrowRight, ArrowLeft, 
   Sparkles, Dumbbell, ShieldAlert, HeartHandshake, Eye, Camera, X, RefreshCw, AlertCircle,
-  Database, LogIn, LogOut, CheckCircle2, ShieldCheck, Cloud, Video, Play, Square, Upload, Film
+  Database, LogIn, LogOut, CheckCircle2, ShieldCheck, Cloud, Video, Play, Square, Upload, Film, Flame
 } from 'lucide-react';
 import { auth, signInWithGoogle, logoutUser, getProfileFromFirestore, saveProfileToFirestore, registerWithEmail, loginWithEmail, ensureAuthenticatedUser } from '../firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { simplifyAnalysisText, simplifyDeviationTag, getSomatotypeDefinition } from '../utils/simplifyAnalysis';
 
 interface OnboardingProps {
   onComplete: (profile: UserProfile) => void;
@@ -186,6 +187,16 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
+  const [heightUnit, setHeightUnit] = useState<'cm' | 'ft'>('cm');
+  const [feetInput, setFeetInput] = useState<number>(() => {
+    const initialCm = initialProfile?.height || 175;
+    return Math.floor((Number(initialCm) || 175) / 2.54 / 12);
+  });
+  const [inchesInput, setInchesInput] = useState<number>(() => {
+    const initialCm = initialProfile?.height || 175;
+    return Math.round(((Number(initialCm) || 175) / 2.54) % 12);
+  });
+
   useEffect(() => {
     if (initialProfile) {
       setFormData(initialProfile);
@@ -220,6 +231,7 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
   const [cloudLoading, setCloudLoading] = useState(false);
 
   // Email / Password Form state for zero page-reload authentication
+  const [nameInput, setNameInput] = useState('');
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [authMode, setAuthMode] = useState<'register' | 'login'>('register');
@@ -235,114 +247,75 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
 
     const email = emailInput.trim();
     const password = passwordInput.trim();
+    const name = nameInput.trim();
 
-    if (!email || !password) {
-      setAuthError('Please enter both Email and Password.');
-      return;
-    }
-    if (password.length < 6) {
-      setAuthError('Password must be at least 6 characters.');
-      return;
-    }
+    if (mode === 'register') {
+      if (!name) {
+        setAuthError('Please enter your Name.');
+        return;
+      }
+      if (!email || !password) {
+        setAuthError('Please enter both Email and Password.');
+        return;
+      }
+      if (password.length < 6) {
+        setAuthError('Password must be at least 6 characters.');
+        return;
+      }
 
-    setCloudLoading(true);
-    try {
-      if (mode === 'register') {
-        // REGISTER MODE
-        let u: FirebaseUser | null = null;
-        try {
-          u = await registerWithEmail(email, password);
-        } catch (regErr: any) {
-          console.warn("Register attempt notice:", regErr?.code || regErr?.message);
-          const msg = regErr?.message || regErr?.code || '';
-          
-          if (msg.includes('email-already-in-use') || regErr?.code === 'auth/email-already-in-use') {
-            // Auto-login if account already exists with these credentials
-            try {
-              u = await loginWithEmail(email, password);
-            } catch (autoLoginErr: any) {
-              if (autoLoginErr?.code === 'auth/too-many-requests' || autoLoginErr?.message?.includes('too-many-requests')) {
-                setAuthError('Too many authentication attempts. Please wait a minute before trying again.');
-              } else {
-                setAuthError('This email is already registered. Please switch to Log In or verify your password.');
-              }
-              return;
-            }
-          } else if (msg.includes('admin-restricted-operation') || regErr?.code === 'auth/admin-restricted-operation') {
-            // Admin restricted operation fallback session
-            const cleanId = btoa(email.toLowerCase().trim()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 28);
-            u = {
-              uid: `user_${cleanId}`,
-              email,
-              isAnonymous: true
-            } as any;
-          } else if (msg.includes('too-many-requests') || regErr?.code === 'auth/too-many-requests') {
-            setAuthError('Too many attempts in a short time. Please wait a minute and try again.');
-            return;
-          } else if (msg.includes('invalid-email') || regErr?.code === 'auth/invalid-email') {
-            setAuthError('Please enter a valid email address (e.g. name@example.com).');
-            return;
-          } else if (msg.includes('weak-password') || regErr?.code === 'auth/weak-password') {
-            setAuthError('Password must be at least 6 characters.');
-            return;
-          } else {
-            setAuthError(msg.replace('Firebase: ', '') || 'Registration error. Please try again.');
-            return;
-          }
-        }
-
+      setCloudLoading(true);
+      try {
+        const u = await registerWithEmail(email, password, name);
         if (u) {
           setUser(u);
-          setFormData(prev => ({ ...prev, email }));
+          setFormData(prev => ({
+            ...prev,
+            name: name || u.displayName || prev.name || '',
+            email: email
+          }));
+          // Brand new registered user -> Proceed directly to Onboarding (Step 1: Bio Details & 4 Photos)
+          setCurrentStep(1);
+        }
+      } catch (regErr: any) {
+        const msg = regErr?.message ? regErr.message.replace('Firebase: ', '') : 'Registration failed. Please try again.';
+        setAuthError(msg);
+      } finally {
+        setCloudLoading(false);
+      }
+    } else {
+      // LOG IN MODE
+      if (!email || !password) {
+        setAuthError('Please enter both Email and Password.');
+        return;
+      }
+
+      setCloudLoading(true);
+      try {
+        const u = await loginWithEmail(email, password);
+        if (u) {
+          setUser(u);
+          // Check if existing profile document exists in Firestore
           const remote = await getProfileFromFirestore(u.uid);
           if (remote && (remote.name || remote.photoFront || remote.physiquePhoto || remote.weight)) {
+            // Credentials valid & saved profile exists -> Route directly to Home Dashboard!
             setFormData(remote);
             onComplete(remote as UserProfile);
           } else {
-            // Proceed directly to profile building step 1
+            // Credentials valid but no profile saved yet -> Route to Onboarding
+            setFormData(prev => ({
+              ...prev,
+              name: u.displayName || prev.name || '',
+              email: email
+            }));
             setCurrentStep(1);
           }
         }
-      } else {
-        // LOG IN MODE
-        let u: FirebaseUser | null = null;
-        try {
-          u = await loginWithEmail(email, password);
-        } catch (loginErr: any) {
-          console.warn("Login attempt notice:", loginErr?.code || loginErr?.message);
-          if (loginErr?.code === 'auth/too-many-requests' || loginErr?.message?.includes('too-many-requests')) {
-            setAuthError('Too many failed attempts. Access is temporarily locked for security. Please wait 1-2 minutes and try again.');
-          } else {
-            setAuthError('invalid credentials, please try again');
-          }
-          return;
-        }
-
-        if (u) {
-          setUser(u);
-          const remote = await getProfileFromFirestore(u.uid);
-          if (remote && (remote.name || remote.photoFront || remote.physiquePhoto || remote.weight)) {
-            // Credentials match & saved profile exists -> directly to daily plan!
-            setFormData(remote);
-            onComplete(remote as UserProfile);
-          } else {
-            // Credentials match but profile not built yet or was reset -> go to profile building
-            setFormData(prev => ({ ...prev, email }));
-            setCurrentStep(1);
-          }
-        } else {
-          setAuthError('invalid credentials, please try again');
-        }
+      } catch (loginErr: any) {
+        const msg = loginErr?.message ? loginErr.message.replace('Firebase: ', '') : 'Invalid credentials. Please try again.';
+        setAuthError(msg);
+      } finally {
+        setCloudLoading(false);
       }
-    } catch (err: any) {
-      console.error("Auth Exception:", err);
-      if (mode === 'login') {
-        setAuthError('invalid credentials, please try again');
-      } else {
-        setAuthError(err?.message ? err.message.replace('Firebase: ', '') : 'Registration error. Please try again.');
-      }
-    } finally {
-      setCloudLoading(false);
     }
   };
 
@@ -570,6 +543,7 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
     if (currentStep === 1) {
       if (!formData.name?.trim()) newErrors.name = 'Please enter your name';
       if (!formData.age || formData.age < 10 || formData.age > 100) newErrors.age = 'Please enter a valid age (10-100)';
+      if (!formData.height || formData.height < 50 || formData.height > 250) newErrors.height = 'Please enter a valid height (50-250 cm)';
       if (!formData.photoFront || !formData.photoLeft || !formData.photoRight || !formData.photoBack) {
         newErrors.photos = 'Please provide all 4 photos (Front, Left Profile, Right Profile, and Back Photo) to allow high-accuracy aesthetic analysis and body structure calibration.';
       }
@@ -743,6 +717,25 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                       </div>
                     )}
 
+                    {authMode === 'register' && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                          Your Full Name
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Shaurya Sharma"
+                          value={nameInput}
+                          onChange={(e) => {
+                            setNameInput(e.target.value);
+                            setFormData(prev => ({ ...prev, name: e.target.value }));
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-sky-500 transition"
+                        />
+                      </div>
+                    )}
+
                     <div>
                       <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
                         {authMode === 'register' ? 'Register Gmail / Email Address' : 'Registered Email Address'}
@@ -862,7 +855,7 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
             {/* STEP 1: BASICS & PHOTO */}
             {currentStep === 1 && (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-bold text-slate-300 mb-2 uppercase tracking-wide">What should I call you?</label>
                     <input
@@ -889,6 +882,107 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                       } focus:outline-none focus:ring-3 font-semibold transition`}
                     />
                     {errors.age && <p className="text-red-400 text-xs mt-1">{errors.age}</p>}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-bold text-slate-300 uppercase tracking-wide">Height</label>
+                      <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setHeightUnit('cm')}
+                          className={`px-2 py-0.5 text-[10px] font-extrabold rounded ${
+                            heightUnit === 'cm'
+                              ? 'bg-sky-500 text-slate-950 shadow'
+                              : 'text-slate-400 hover:text-white'
+                          } transition cursor-pointer`}
+                        >
+                          cm
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHeightUnit('ft');
+                            const totalInches = Math.round((formData.height || 175) / 2.54);
+                            setFeetInput(Math.floor(totalInches / 12));
+                            setInchesInput(totalInches % 12);
+                          }}
+                          className={`px-2 py-0.5 text-[10px] font-extrabold rounded ${
+                            heightUnit === 'ft'
+                              ? 'bg-sky-500 text-slate-950 shadow'
+                              : 'text-slate-400 hover:text-white'
+                          } transition cursor-pointer`}
+                        >
+                          ft / in
+                        </button>
+                      </div>
+                    </div>
+
+                    {heightUnit === 'cm' ? (
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={formData.height || ''}
+                          onChange={e => {
+                            const val = parseInt(e.target.value) || 0;
+                            updateField('height', val);
+                            const totalIn = Math.round(val / 2.54);
+                            setFeetInput(Math.floor(totalIn / 12));
+                            setInchesInput(totalIn % 12);
+                          }}
+                          placeholder="e.g. 175"
+                          className={`w-full px-4 py-3 rounded-xl border bg-slate-950 text-white ${
+                            errors.height ? 'border-red-500 focus:ring-red-500/20' : 'border-slate-800 focus:ring-sky-500/20'
+                          } focus:outline-none focus:ring-3 font-semibold transition`}
+                        />
+                        <span className="absolute right-4 top-3.5 text-xs text-slate-500 font-bold">cm</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <input
+                            type="number"
+                            value={feetInput}
+                            onChange={e => {
+                              const ft = parseInt(e.target.value) || 0;
+                              setFeetInput(ft);
+                              const calcCm = Math.round((ft * 12 + inchesInput) * 2.54);
+                              updateField('height', calcCm);
+                            }}
+                            placeholder="ft"
+                            className={`w-full px-3 py-3 rounded-xl border bg-slate-950 text-white ${
+                              errors.height ? 'border-red-500 focus:ring-red-500/20' : 'border-slate-800 focus:ring-sky-500/20'
+                            } focus:outline-none focus:ring-3 font-semibold transition text-center`}
+                          />
+                          <span className="absolute right-2 top-3.5 text-xs text-slate-500 font-bold">ft</span>
+                        </div>
+                        <div className="relative flex-1">
+                          <input
+                            type="number"
+                            value={inchesInput}
+                            onChange={e => {
+                              const inc = parseInt(e.target.value) || 0;
+                              setInchesInput(inc);
+                              const calcCm = Math.round((feetInput * 12 + inc) * 2.54);
+                              updateField('height', calcCm);
+                            }}
+                            placeholder="in"
+                            className={`w-full px-3 py-3 rounded-xl border bg-slate-950 text-white ${
+                              errors.height ? 'border-red-500 focus:ring-red-500/20' : 'border-slate-800 focus:ring-sky-500/20'
+                            } focus:outline-none focus:ring-3 font-semibold transition text-center`}
+                          />
+                          <span className="absolute right-2 top-3.5 text-xs text-slate-500 font-bold">in</span>
+                        </div>
+                      </div>
+                    )}
+                    {formData.height ? (
+                      <p className="text-[11px] text-slate-400 mt-1 font-mono">
+                        {heightUnit === 'ft'
+                          ? `≈ ${formData.height} cm`
+                          : `≈ ${Math.floor(Math.round(formData.height / 2.54) / 12)}'${Math.round(formData.height / 2.54) % 12}"`}
+                      </p>
+                    ) : null}
+                    {errors.height && <p className="text-red-400 text-xs mt-1">{errors.height}</p>}
                   </div>
                 </div>                {/* 4-Angle Photo Portfolio Upload Step-by-Step */}
                 <div className="space-y-4">
@@ -1073,7 +1167,7 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                     Evaluate Your Current Aesthetic Frame
                   </h3>
                   <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-                    Coach Kai's AI engine will process your 4 photos below to predict your structural frame type, current silhouette attributes, and postural orientation.
+                    Coach Kai's AI engine will process your 4 photos to estimate your body fat percentage, muscle mass index, exact baseline weight, and biomechanical posture alignment.
                   </p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1132,8 +1226,10 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                                   injuriesOrConditions: formData.injuriesOrConditions
                                 })
                               });
-                              if (!res.ok) throw new Error("Failed to analyze image portfolio");
                               const data = await res.json();
+                              if (!res.ok || data.error) {
+                                throw new Error(data.error || `Failed to analyze image portfolio (HTTP ${res.status})`);
+                              }
                               if (data.valid_full_body !== undefined) updateField('valid_full_body', data.valid_full_body);
                               if (data.rejection_reason) updateField('rejection_reason', data.rejection_reason);
                               if (data.postureAssessment) updateField('postureAssessment', data.postureAssessment);
@@ -1160,7 +1256,9 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                               if (data.aestheticPotential) updateField('aestheticPotential', data.aestheticPotential);
                               if (data.coachDirectives) updateField('coachDirectives', data.coachDirectives);
                             } catch (err: any) {
-                              setAnalysisError(err.message || "An error occurred during analysis.");
+                              console.error("Physique analysis error:", err);
+                              const msg = err.message || "An error occurred during analysis.";
+                              setAnalysisError(msg.startsWith("API Error:") ? msg : `API Error: ${msg}`);
                             } finally {
                               setLoadingAnalysis(false);
                             }
@@ -1198,18 +1296,34 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                           </div>
                         ) : formData.physiqueAnalysis ? (
                           <div className="space-y-3.5">
-                            {formData.frameType && (
-                              <div className="inline-flex items-center gap-1.5 bg-sky-500/10 border border-sky-500/30 text-sky-400 px-3 py-1 rounded-xl text-xs font-bold font-display">
-                                <Activity className="w-3.5 h-3.5 text-sky-400" />
-                                Body Frame: {formData.frameType}
+                            {formData.estimatedBodyFatPercent ? (
+                              <div className="inline-flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-3 py-1 rounded-xl text-xs font-bold font-display">
+                                <Flame className="w-3.5 h-3.5 text-amber-400" />
+                                Body Fat % Range: {formData.estimatedBodyFatPercent}%
                               </div>
-                            )}
+                            ) : formData.frameType ? (
+                              <div className="inline-flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-3 py-1 rounded-xl text-xs font-bold font-display">
+                                <Flame className="w-3.5 h-3.5 text-amber-400" />
+                                Body Fat % Range: 20% - 25%
+                              </div>
+                            ) : null}
 
-                            <div className="bg-slate-900/80 p-4 rounded-xl border border-sky-500/30 text-center space-y-1">
-                              <span className="text-[10px] uppercase font-extrabold text-sky-400 tracking-wider block">Estimated Weight Baseline</span>
-                              <span className="text-2xl font-black text-white font-mono block">
-                                {formData.calculated_weight_kg ? `${formData.calculated_weight_kg} kg` : formData.weight ? `${formData.weight} kg` : "84 kg"}
-                              </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div className="bg-slate-900/80 p-3.5 rounded-xl border border-sky-500/30 text-center space-y-1">
+                                <span className="text-[10px] uppercase font-extrabold text-sky-400 tracking-wider block">Somatotype</span>
+                                <span className="text-xl font-black text-white font-display uppercase tracking-tight block">
+                                  {formData.frameType || formData.bodyType || "Endomorph"}
+                                </span>
+                                <p className="text-[11px] text-slate-300 leading-snug pt-1 text-center border-t border-slate-800/80 mt-1 font-sans">
+                                  {simplifyAnalysisText(formData.personalizedDefinition || getSomatotypeDefinition(formData.frameType || formData.bodyType || "Endomorph"))}
+                                </p>
+                              </div>
+                              <div className="bg-slate-900/80 p-3.5 rounded-xl border border-emerald-500/30 text-center space-y-0.5">
+                                <span className="text-[10px] uppercase font-extrabold text-emerald-400 tracking-wider block">Est. Weight Baseline</span>
+                                <span className="text-xl font-black text-emerald-400 font-mono tracking-tight block">
+                                  {formData.calculated_weight_kg ? `${formData.calculated_weight_kg} kg` : formData.weight ? `${formData.weight} kg` : "108 kg"}
+                                </span>
+                              </div>
                             </div>
 
                             {/* Full-Body Validation Notice */}
@@ -1247,33 +1361,14 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                                     <div className="flex flex-wrap gap-1.5">
                                       {formData.postureAssessment.identifiedDeviations.map((dev: string, idx: number) => (
                                         <span key={idx} className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-semibold px-2 py-0.5 rounded-md">
-                                          {dev}
+                                          {simplifyDeviationTag(dev)}
                                         </span>
                                       ))}
                                     </div>
                                   </div>
                                 )}
-
-                                {formData.postureAssessment.exerciseModifications && formData.postureAssessment.exerciseModifications.length > 0 && (
-                                  <div>
-                                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Exercise Modifications</span>
-                                    <ul className="space-y-1 text-[11px] text-slate-300">
-                                      {formData.postureAssessment.exerciseModifications.map((mod: string, idx: number) => (
-                                        <li key={idx} className="flex items-start gap-1.5">
-                                          <span className="text-teal-400 shrink-0 mt-0.5">•</span>
-                                          <span>{mod}</span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
                               </div>
                             )}
-
-                            <div className="text-xs text-slate-200 leading-relaxed whitespace-pre-line bg-slate-900/80 p-4 rounded-xl border border-sky-500/20 shadow-inner">
-                              <span className="font-bold text-sky-400 block mb-1 uppercase tracking-wider text-[10px]">Simple Body Analysis</span>
-                              {formData.physiqueAnalysis}
-                            </div>
 
                             {/* 4-Angle Multi-Angle Analysis */}
                             {(formData.frontAngleReport || formData.sideAngleReport || formData.backAngleReport) && (
@@ -1285,7 +1380,7 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                                     <div className="font-bold text-emerald-400 text-[11px] mb-0.5 flex items-center gap-1.5">
                                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Front View Analysis
                                     </div>
-                                    <p className="text-slate-300 text-[11px] leading-relaxed">{formData.frontAngleReport}</p>
+                                    <p className="text-slate-300 text-[11px] leading-relaxed">{simplifyAnalysisText(formData.frontAngleReport)}</p>
                                   </div>
                                 )}
 
@@ -1294,7 +1389,7 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                                     <div className="font-bold text-sky-400 text-[11px] mb-0.5 flex items-center gap-1.5">
                                       <span className="w-1.5 h-1.5 rounded-full bg-sky-400"></span> Profiles & Posture Analysis
                                     </div>
-                                    <p className="text-slate-300 text-[11px] leading-relaxed">{formData.sideAngleReport}</p>
+                                    <p className="text-slate-300 text-[11px] leading-relaxed">{simplifyAnalysisText(formData.sideAngleReport)}</p>
                                   </div>
                                 )}
 
@@ -1303,9 +1398,21 @@ export default function Onboarding({ onComplete, initialProfile }: OnboardingPro
                                     <div className="font-bold text-amber-400 text-[11px] mb-0.5 flex items-center gap-1.5">
                                       <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Back View & Lat Alignment
                                     </div>
-                                    <p className="text-slate-300 text-[11px] leading-relaxed">{formData.backAngleReport}</p>
+                                    <p className="text-slate-300 text-[11px] leading-relaxed">{simplifyAnalysisText(formData.backAngleReport)}</p>
                                   </div>
                                 )}
+                              </div>
+                            )}
+
+                            {/* Overall Body Analysis Paragraph */}
+                            {formData.physiqueAnalysis && (
+                              <div className="bg-slate-900/60 p-3 rounded-xl border border-sky-500/20 text-xs space-y-1">
+                                <div className="font-bold text-sky-400 text-[11px] flex items-center gap-1.5 font-display uppercase tracking-wider">
+                                  <Sparkles className="w-3.5 h-3.5 text-sky-400" /> Overall Body Analysis
+                                </div>
+                                <p className="text-slate-200 text-[11px] leading-relaxed font-sans pt-0.5">
+                                  {simplifyAnalysisText(formData.physiqueAnalysis)}
+                                </p>
                               </div>
                             )}
                           </div>

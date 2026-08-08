@@ -587,11 +587,7 @@ export default function Dashboard({
             disabled={loading}
             className="w-full max-w-lg mx-auto py-5 sm:py-6 px-8 rounded-3xl bg-gradient-to-r from-sky-400 via-sky-500 to-teal-400 hover:from-sky-300 hover:to-teal-300 text-slate-950 font-black text-xl sm:text-2xl uppercase tracking-wider shadow-2xl shadow-sky-500/30 hover:shadow-sky-500/50 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3.5 cursor-pointer border-2 border-white/20 disabled:opacity-50"
           >
-            {loading ? (
-              <RefreshCw className="w-8 h-8 animate-spin text-slate-950" />
-            ) : (
-              <Play className="w-8 h-8 fill-slate-950 stroke-slate-950" />
-            )}
+            {loading && <RefreshCw className="w-8 h-8 animate-spin text-slate-950" />}
             <span>{loading ? "Generating Plan..." : "Start Today's Plan"}</span>
           </button>
         </div>

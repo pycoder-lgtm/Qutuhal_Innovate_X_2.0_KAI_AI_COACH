@@ -1355,24 +1355,23 @@ function computeProfileSmartDefaults(profile: any) {
     valid_full_body: true,
     rejection_reason: null,
     postureAssessment: {
-      headNeck: "Head and neck look mostly straight and natural.",
-      shoulders: "Shoulders are balanced and fairly level.",
-      pelvisSpine: "Back and waist are well aligned.",
-      kneesAnkles: "Knees and ankles stand sturdy.",
+      headNeck: "Spinal alignment within standard range.",
+      shoulders: "Shoulder level evaluated.",
+      pelvisSpine: "Pelvic tilt evaluated.",
+      kneesAnkles: "Lower kinetic chain evaluated.",
       identifiedDeviations: [
-        "Slight Shoulder Unbalance",
-        "Minor Back Tension"
+        "Slight Shoulder Imbalance",
+        "Lumbar Tension"
       ],
       exerciseModifications: [
-        "Do light daily shoulder stretches and gentle walks.",
-        "Keep your chest tall and open when sitting or standing."
+        "Include dynamic mobility work prior to compound lifts."
       ]
     },
-    frameType: "Healthy Balanced Frame",
-    frontAngleReport: "Balanced chest and shoulders with a healthy overall frame.",
-    sideAngleReport: "Good standing posture with a natural straight back.",
-    backAngleReport: "Steady upper back alignment and balanced posture.",
-    analysis: `Your body posture looks balanced and overall frame is healthy and natural. You have a solid, healthy baseline to start your daily workouts, so keep standing tall with your shoulders relaxed and enjoy balanced, nutritious meals.`,
+    frameType: "Evaluated Frame",
+    frontAngleReport: "Front view evaluated.",
+    sideAngleReport: "Side view evaluated.",
+    backAngleReport: "Back view evaluated.",
+    analysis: "Biometric and posture calculation complete based on demographic criteria.",
     predictedWeight: weight,
     predictedHeight: height,
     predictedWeightRange: `${Math.max(40, weight - 3)} - ${weight + 3} kg`,
@@ -1391,10 +1390,6 @@ function computeProfileSmartDefaults(profile: any) {
       "Apply progressive overload by adding 1 rep or small weight increments weekly"
     ]
   };
-}
-
-function getFallbackPhysiqueAnalysis(profile?: any) {
-  return computeProfileSmartDefaults(profile || {});
 }
 
 // Explicit Request Body Validation Middlewares
@@ -1746,7 +1741,7 @@ THEN: Instantly scale Cm into the 1.45 - 1.70 range to accurately hit 100 kg - 1
 app.post("/api/analyze-physique", validateAtLeastOneField(["photoFront", "photoLeft", "photoRight", "photoBack", "image"], "At least one physique photo is required for analysis."), async (req: express.Request, res: express.Response) => {
   let timeoutId: any = null;
   try {
-    const { photoFront, photoLeft, photoRight, photoBack, image, name, user_name, age, user_age } = req.body;
+    const { photoFront, photoLeft, photoRight, photoBack, image, name, user_name, age, user_age, measured_height_cm, height, user_height, gender, user_gender } = req.body;
     
     const imagesToAnalyze: { label: string; base64: string }[] = [];
     if (photoFront) imagesToAnalyze.push({ label: "Front View", base64: photoFront });
@@ -1763,8 +1758,11 @@ app.post("/api/analyze-physique", validateAtLeastOneField(["photoFront", "photoL
     
     const userName = user_name || name || "Aesthetic Warrior";
     const userAge = user_age || age || 25;
+    const userGender = user_gender || gender || "male";
+    const userHeight = measured_height_cm || height || user_height || 175;
+    const heightFormatted = typeof userHeight === 'number' ? `${userHeight} cm` : String(userHeight).includes('cm') || String(userHeight).includes("'") ? String(userHeight) : `${userHeight} cm`;
     
-    let textPrompt = `You are conducting an in-depth professional posture and 4-angle aesthetic frame assessment for user ${userName} who is ${userAge} years old. You have been provided with ${imagesToAnalyze.length} photo(s) representing different angles of their body (Front, Left Side, Right Side, Back Angle).
+    let textPrompt = `The user in these photos is ${userAge} years old and exactly ${heightFormatted} tall. You MUST use this height as your strict mathematical anchor. Calculate the volumetric mass of their specific somatotype at this exact height to determine their estimatedWeight. You are conducting a clinical 4-angle posture and biometric analysis for user ${userName}. You have been provided with ${imagesToAnalyze.length} photo(s) representing different angles of their body (Front, Left Side, Right Side, Back Angle).
 
 The provided photos are:
 `;
@@ -1773,49 +1771,42 @@ The provided photos are:
       textPrompt += `- Photo ${index + 1}: ${item.label}\n`;
     });
     
-    textPrompt += `\nTASK & VALIDATION RULE:
+    textPrompt += `\nTASK & SCOPE:
+Compute the following metrics: Body Fat %, Muscle Mass Classification, Estimated Weight, and Postural Deviations.
+Do NOT estimate or request 'frame type' or 'silhouette attributes'.
+
+VALIDATION RULE:
 1. FIRST, perform a full-body check. Verify if the human subject is fully visible from head to toe (ears/head top down to feet/soles).
 2. IF the head, hips, or feet are cropped out in the photo(s):
    - Set "valid_full_body": false
-   - Set "rejection_reason": Explain clearly what is cropped out (e.g., "The top of the head, hips, or feet are cropped out in the photo. A complete head-to-toe photo is required for posture analysis.").
+   - Set "rejection_reason": Explain clearly what is cropped out.
    - Stop detailed posture assessment and set fallback posture notes.
 3. IF the full body is visible from head to toe:
    - Set "valid_full_body": true
    - Set "rejection_reason": null (or empty string)
-   - Execute full posture assessment across Front, Left Side, Right Side, and Back photos.
+   - Execute posture and biometric assessment across Front, Left Side, Right Side, and Back photos.
 
 POSTURE ANALYSIS GUIDELINES (When valid_full_body is true):
 - Assess alignment across: Head/Neck, Shoulders, Pelvis/Spine, and Knees/Ankles.
 - Identify common deviations (e.g., Forward Head Posture, Anterior Pelvic Tilt, Shoulder Elevation, Knee Valgus).
 - Map identified deviations directly to exercise modifications.
-- Perform internal frame density calculations silently and return a single integer estimated weight baseline in kg ("calculated_weight_kg").
+- Return estimated weight baseline in kg ("calculated_weight_kg").
 
 Provide:
 1. "user_name": "${userName}"
-2. "calculated_weight_kg": Single integer estimated baseline weight in kg (e.g., 84). Perform internal frame density calculations silently.
+2. "calculated_weight_kg": Single integer estimated baseline weight in kg (e.g., 84).
 3. "valid_full_body": boolean
 4. "rejection_reason": string or null
-5. "postureAssessment": object with:
-   - "headNeck": alignment analysis & deviations
-   - "shoulders": alignment analysis & deviations
-   - "pelvisSpine": alignment analysis & deviations
-   - "kneesAnkles": alignment analysis & deviations
-   - "identifiedDeviations": array of specific deviation strings
-   - "exerciseModifications": array of direct exercise modification mapping strings
-6. "analysis": Executive aesthetic frame and posture summary report.
-7. "frameType": Skeletal frame archetype (e.g., "V-Taper Athletic Mesomorph").
-8. "frontAngleReport": Detailed front view observations.
-9. "sideAngleReport": Detailed side view observations (posture, spinal curve, pelvic tilt).
-10. "backAngleReport": Detailed back view observations (lats, traps, scapulae).
-11. "predictedWeight": Numerical calculated weight in kg.
-12. "predictedHeight": Numerical estimated height in cm.
-13. "estimatedBodyFatPercent": Estimated body fat percentage.
-14. "bmr": Basal Metabolic Rate in kcal.
-15. "tdee": Total Daily Energy Expenditure in kcal.
-16. "recommendedMacros": Protein (g), Carbs (g), Fat (g).
-17. "biomechanicalAlerts": Array of 2-3 specific movement/posture cautions.
-18. "aestheticPotential": 1-line blueprint title.
-19. "coachDirectives": Array of 3 actionable training/nutrition habits.`;
+5. "postureAssessment": object with identifiedDeviations and exerciseModifications
+6. "analysis": Scientific body composition and posture summary report.
+7. "estimatedBodyFatPercent": Estimated body fat percentage.
+8. "predictedWeight": Numerical calculated weight in kg.
+9. "predictedHeight": Numerical estimated height in cm.
+10. "bmr": Basal Metabolic Rate in kcal.
+11. "tdee": Total Daily Energy Expenditure in kcal.
+12. "recommendedMacros": Protein (g), Carbs (g), Fat (g).
+13. "biomechanicalAlerts": Array of 2-3 specific movement/posture cautions.
+14. "coachDirectives": Array of 3 actionable training/nutrition habits.`;
 
     parts.push({ text: textPrompt });
 
@@ -1872,19 +1863,26 @@ If BOTH conditions are met:
 THEN: Instantly scale Cm into the 1.45 - 1.70 range to accurately hit 100 kg - 125+ kg, regardless of dark or loose clothing.
 
 --------------------------------------------------
-3. SIMPLE LANGUAGE & POSTURE SCAN RULES
+3. CLINICAL ANTHROPOMETRIC & SOMATOTYPE DIAGNOSTIC RULES
 --------------------------------------------------
-- CRITICAL REQUIREMENT FOR 'analysis': The 'analysis' summary MUST be written in VERY SIMPLE, friendly, everyday language in EXACTLY ONE SHORT PARAGRAPH (2 to 4 simple sentences maximum).
-- YOU ARE STRICTLY FORBIDDEN from using complex, medical, or technical jargon words like: 'endomorph', 'ectomorph', 'mesomorph', 'anterior pelvic tilt', 'scapular protraction', 'cervical spine', 'lumbar', 'BMR', 'TDEE', 'hypertrophy', 'partitioning', 'somatotype', etc.
-- Use simple, everyday terms that anyone already knows (e.g. 'good standing posture', 'straight back', 'slight shoulder tilt', 'healthy overall build').
-- 'frameType' should be simple (e.g. "Healthy Balanced Frame", "Strong Athletic Frame").
+- UNVARNISHED DIRECT TRUTH: Zero sugarcoating, zero forced positivity, zero conversational filler or flattering adjectives (do NOT use soft phrases like 'healthy overall build', 'strong athletic frame', 'promising', 'great', or 'solid frame').
+- Provide an objective diagnostic of the subject's actual body composition, actual estimated weight in kg, true somatotype (Endomorph, Mesomorph, Ectomorph, or hybrid like Endo-Mesomorph / Ecto-Mesomorph), estimated body fat percentage, fat distribution, and posture habits.
+- STRICT LINGUISTIC RULE FOR ALL REPORTS ("analysis", "frontAngleReport", "sideAngleReport", "backAngleReport"):
+  * Write in extremely simple, everyday English (5th-grade reading level) that any common user can easily understand.
+  * ZERO JARGON: You are strictly forbidden from using medical, biological, or anatomical words (e.g., do NOT use words like adipose, visceral, pelvic, kyphosis, lordosis, hypertrophy, scapular, protraction, sagittal, anterior, or posterior chain).
+  * Instead of 'adipose tissue' or 'central adiposity', say 'body fat' or 'extra weight around the waist'.
+  * Instead of 'anterior pelvic tilt', say 'hip posture' or 'lower back curve'.
+  * Instead of 'forward head carriage', say 'head leaning forward'.
+  * Instead of 'rounded shoulders' or 'shoulder protraction', say 'shoulders curving forward'.
+- 'frameType' MUST state the actual somatotype classification (e.g. "Endomorph", "Mesomorph", "Ectomorph", "Endo-Mesomorph", "Ecto-Mesomorph").
+- 'analysis': An objective, simple 2-3 sentence summary of the user's body shape and posture in simple, everyday English without medical or biological jargon.
 
 --------------------------------------------------
 4. STRICT OUTPUT INSTRUCTIONS
 --------------------------------------------------
 - Return ONLY valid JSON matching the defined schema.
 - All weight values MUST be integer numbers. Perform internal frame density calculations silently and return calculated_weight_kg.
-- Keep the 'analysis' field strictly to ONE simple, friendly paragraph.`,
+- Keep the 'analysis' field strictly to an unvarnished clinical summary paragraph.`,
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -2002,16 +2000,10 @@ THEN: Instantly scale Cm into the 1.45 - 1.70 range to accurately hit 100 kg - 1
     });
   } catch (error: any) {
     if (timeoutId) clearTimeout(timeoutId);
-    console.log("Physique assessment completed with programmatic analysis.", error?.message || "");
-    try {
-      const fallbackAnalysis = getFallbackPhysiqueAnalysis(req.body);
-      res.json({
-        ...fallbackAnalysis,
-        isFallback: true
-      });
-    } catch (fallbackError: any) {
-      res.status(500).json({ error: error.message || "Failed to analyze physique image." });
-    }
+    console.error("Physique assessment API error:", error?.message || error);
+    res.status(500).json({ 
+      error: `API Error: ${error?.message || "Failed to analyze physique image using Gemini model."}` 
+    });
   }
 });
 
@@ -2054,7 +2046,7 @@ Provide:
       model: "gemini-3.6-flash",
       contents: [{ text: prompt }],
       config: {
-        systemInstruction: "You are Coach Kai, an elite sports scientist. Provide precise, scientific, and encouraging profile analysis in the exact JSON format.",
+        systemInstruction: "You are Coach Kai, an elite sports scientist and biometrics diagnostic expert. Provide precise, unvarnished, direct clinical profile analysis with no sugarcoating or forced positivity in the exact JSON format.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,

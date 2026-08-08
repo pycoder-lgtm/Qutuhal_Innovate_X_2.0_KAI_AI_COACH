@@ -6,7 +6,8 @@ import {
   signOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signInAnonymously
+  signInAnonymously,
+  updateProfile
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -114,11 +115,36 @@ export async function signInWithGoogle() {
   }
 }
 
-export async function registerWithEmail(email: string, pass: string) {
+export async function registerWithEmail(email: string, pass: string, name?: string) {
   try {
     const res = await createUserWithEmailAndPassword(auth, email, pass);
+    if (name && name.trim()) {
+      try {
+        await updateProfile(res.user, { displayName: name.trim() });
+      } catch (pErr) {
+        console.warn("Could not set displayName on Auth user:", pErr);
+      }
+    }
     return res.user;
   } catch (error: any) {
+    if (
+      error?.code === 'auth/email-already-in-use' ||
+      error?.message?.includes('email-already-in-use')
+    ) {
+      throw new Error('This email is already registered. Please switch to Log In.');
+    }
+    if (
+      error?.code === 'auth/invalid-email' ||
+      error?.message?.includes('invalid-email')
+    ) {
+      throw new Error('Please enter a valid email address.');
+    }
+    if (
+      error?.code === 'auth/weak-password' ||
+      error?.message?.includes('weak-password')
+    ) {
+      throw new Error('Password must be at least 6 characters.');
+    }
     if (
       error?.code === 'auth/operation-not-allowed' || 
       error?.code === 'auth/admin-restricted-operation' ||
@@ -128,32 +154,24 @@ export async function registerWithEmail(email: string, pass: string) {
       console.warn("Email/Password registration restricted in Firebase project settings. Using fallback authentication session...");
       try {
         const anonRes = await signInAnonymously(auth);
+        if (name && name.trim()) {
+          try {
+            await updateProfile(anonRes.user, { displayName: name.trim() });
+          } catch (e) {}
+        }
         return anonRes.user;
       } catch (anonErr) {
-        // Deterministic session UID fallback
         const cleanId = btoa(email.toLowerCase().trim()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 28);
         return {
           uid: `user_${cleanId}`,
           email: email.trim(),
+          displayName: name?.trim() || email.split('@')[0],
           isAnonymous: true
         } as any;
       }
     }
-    if (
-      error?.code === 'auth/email-already-in-use' ||
-      error?.message?.includes('email-already-in-use')
-    ) {
-      console.log("Email already registered. Attempting login with provided credentials...");
-      try {
-        const loginRes = await signInWithEmailAndPassword(auth, email, pass);
-        return loginRes.user;
-      } catch (loginErr: any) {
-        console.warn("Email already registered; auto-login notice:", loginErr?.message || loginErr?.code);
-        throw error;
-      }
-    }
     console.error("Email Registration Error:", error);
-    throw error;
+    throw new Error(error?.message?.replace('Firebase: ', '') || 'Registration failed. Please try again.');
   }
 }
 
@@ -162,6 +180,26 @@ export async function loginWithEmail(email: string, pass: string) {
     const res = await signInWithEmailAndPassword(auth, email, pass);
     return res.user;
   } catch (error: any) {
+    if (
+      error?.code === 'auth/user-not-found' ||
+      error?.code === 'auth/invalid-credential' ||
+      error?.message?.includes('user-not-found') ||
+      error?.message?.includes('invalid-credential')
+    ) {
+      throw new Error('Email not registered or invalid credentials. Please Sign Up.');
+    }
+    if (
+      error?.code === 'auth/wrong-password' ||
+      error?.message?.includes('wrong-password')
+    ) {
+      throw new Error('Incorrect password. Please check your password or Sign Up.');
+    }
+    if (
+      error?.code === 'auth/too-many-requests' ||
+      error?.message?.includes('too-many-requests')
+    ) {
+      throw new Error('Too many failed attempts. Please wait a minute and try again.');
+    }
     if (
       error?.code === 'auth/operation-not-allowed' || 
       error?.code === 'auth/admin-restricted-operation' ||
@@ -181,18 +219,8 @@ export async function loginWithEmail(email: string, pass: string) {
         } as any;
       }
     }
-    if (
-      error?.code === 'auth/user-not-found' ||
-      error?.code === 'auth/wrong-password' ||
-      error?.code === 'auth/invalid-credential' ||
-      error?.code === 'auth/email-already-in-use' ||
-      error?.code === 'auth/too-many-requests'
-    ) {
-      console.warn("Email Login notice:", error?.message || error?.code);
-      throw error;
-    }
     console.error("Email Login Error:", error);
-    throw error;
+    throw new Error(error?.message?.replace('Firebase: ', '') || 'Invalid email or password. Please try again.');
   }
 }
 

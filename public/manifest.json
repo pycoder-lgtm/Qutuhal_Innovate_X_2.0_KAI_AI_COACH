@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "short_name": "Coach Kai",
-  "name": "Coach Kai AI - Personal Fitness & Body Coach",
+  "short_name": "Kai",
+  "name": "Kai AI Coach",
   "description": "AI Body Scan, Personal Workout Plans & Biometrics Tracking",
   "icons": [
     {
@@ -22,7 +22,5 @@
   "background_color": "#020617",
   "theme_color": "#020617",
   "display": "standalone",
-  "display_override": ["standalone", "fullscreen", "minimal-ui"],
-  "orientation": "portrait",
-  "categories": ["health", "fitness", "lifestyle"]
+  "orientation": "portrait"
 }

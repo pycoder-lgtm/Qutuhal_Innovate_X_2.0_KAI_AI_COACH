@@ -39,6 +39,36 @@ export interface UserProfile {
   photoLeft?: string; // Base64 Left Side Photo
   photoRight?: string; // Base64 Right Side Photo
   photoBack?: string; // Base64 Back Photo
+  weight_estimate_kg?: number | string; // e.g. 108 or "108 kg"
+  body_fat_percentage_estimate?: string; // e.g. "34% - 38%"
+  structural_flaws?: string[]; // e.g. ["Anterior pelvic tilt detected via hip-spine angle", ...]
+  tissue_composition?: string; // e.g. "Excess adipose tissue accumulation relative to lean muscle mass"
+  estimatedWeightKg?: number; // Raw numeric kg
+  bodyFatPercentage?: number | string; // Raw numeric body fat % or range string
+  muscleMassPercentage?: number; // Raw numeric muscle mass %
+  structuralFlaws?: string[]; // Array of clinical structural flaws
+  bodyCompositionSummary?: string; // Scientific clinical breakdown
+  calculatedWeightKg?: string; // e.g. "108 kg"
+  estimatedBodyFatPercentage?: string; // e.g. "34% - 38%"
+  muscleMassIndex?: string; // e.g. "Low-to-Moderate relative to total mass"
+  structuralDeviations?: string[]; // e.g. ["Anterior pelvic tilt detected via hip-spine angle", ...]
+  physiologicalRisks?: string[]; // e.g. ["Elevated lumbar stress due to anterior pelvic tilt", ...]
+  bodyFatPercentageRange?: string; // e.g. "32% - 37%"
+  muscleMassDistribution?: string; // e.g. "Low visible lean muscle density relative to adipose mass"
+  posturalDeviations?: string[]; // list of specific anatomical issues
+  priorityFocusAreas?: string[]; // primary physiological focus targets
+  estimatedWeight?: string; // e.g. "108 kg"
+  somatotype?: string;
+  personalizedDefinition?: string;
+  detailedSomatotypeAnalysis?: DetailedSomatotypeAnalysis;
+  simpleSummary?: string;
+  estimatedBodyFat?: string; // e.g. "30-35%"
+  bodyStructure?: string; // e.g. "High visceral fat storage, low visible muscle mass"
+  areasForImprovement?: string; // e.g. "Anterior pelvic tilt, excess abdominal adiposity, rounded shoulders"
+  coachKaiSummary?: string; // "tough love" motivational summary
+  bodyType?: string; // e.g. "Athletic build", "Lean build", etc.
+  postureInsights?: string; // e.g. "Slightly rounded shoulders, but great overall alignment."
+  startingSummary?: string; // encouraging Kai AI starting summary
   calculated_weight_kg?: number; // Single estimated weight baseline integer in kg (e.g. 84)
   predictedWeightRange?: string; // e.g. "72 - 78 kg" (kept for chat context)
   predictedHeightRange?: string; // e.g. "173 - 178 cm"
@@ -205,16 +235,61 @@ export interface WatchDevice {
   platform: 'ios' | 'android' | 'mock' | 'bluetooth' | 'web';
 }
 
+export interface DetailedSomatotypeAnalysis {
+  fatDistribution: string;
+  muscleMassTendencies: string;
+  posturalAlignment: string;
+}
+
+export interface UnvarnishedAudit {
+  adiposeStorage: string;
+  muscularDeficits: string;
+  posturalFlaws: string[];
+}
+
 export interface BodyScanAnalysis {
   id: string;
   date: string;
+  estimatedWeight: string;
+  somatotype: string;
+  personalizedDefinition?: string;
+  detailedSomatotypeAnalysis?: DetailedSomatotypeAnalysis;
+  simpleSummary?: string;
+  bodyFatEstimate?: string;
+  unvarnishedAudit?: UnvarnishedAudit;
+  mandatoryDirective?: string;
+  estimatedWeightKg?: number;
+  bodyFatPercentage?: string | number;
+  muscleMassPercentage?: number;
+  structuralFlaws?: string[];
+  bodyCompositionSummary?: string;
+  weight_estimate_kg?: number | string;
+  body_fat_percentage_estimate?: string;
+  structural_flaws?: string[];
+  tissue_composition?: string;
+  calculatedWeightKg?: string;
+  estimatedBodyFatPercentage?: string;
+  muscleMassIndex?: string;
+  structuralDeviations?: string[];
+  physiologicalRisks?: string[];
+  bodyFatPercentageRange?: string;
+  muscleMassDistribution?: string;
+  posturalDeviations?: string[];
+  priorityFocusAreas?: string[];
+  estimatedBodyFat?: string;
+  bodyStructure?: string;
+  areasForImprovement?: string;
+  coachKaiSummary?: string;
+  bodyType?: string;
+  postureInsights?: string;
+  startingSummary?: string;
   summaryParagraph?: string;
-  bodyFatEst: number;
-  postureScore: number;
-  postureNotes: string;
-  shoulderSymmetry: string;
-  pelvicTilt: string;
-  muscleHighlights: string[];
-  recommendations: string[];
+  bodyFatEst?: number;
+  postureScore?: number;
+  postureNotes?: string;
+  shoulderSymmetry?: string;
+  pelvicTilt?: string;
+  muscleHighlights?: string[];
+  recommendations?: string[];
   rawAnalysisText?: string;
 }

@@ -290,6 +290,7 @@ class WearableSyncService {
     error?: string;
   }> {
     if (typeof window === 'undefined' || !('bluetooth' in (navigator as any))) {
+      console.error('[BLE] Web Bluetooth API is not available in this environment.');
       return {
         success: false,
         error: 'Web Bluetooth API is not supported by your browser. Please use Google Chrome, Microsoft Edge, or a Web Bluetooth compatible browser.',
@@ -300,15 +301,35 @@ class WearableSyncService {
     this.notifyBiometricsSubscribers();
 
     try {
-      // Use acceptAllDevices: true to show all nearby Bluetooth devices without filtering
-      const device: any = await (navigator as any).bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: ['heart_rate', 'battery_service', 'fitness_machine', 0x180d, 0x180f, 0x1826]
-      });
+      console.log('[BLE] Step 1: Requesting Bluetooth device via navigator.bluetooth.requestDevice...');
+      
+      // Determine request options (never call requestDevice twice in a single gesture chain)
+      const requestOptions = acceptAllDevicesFallback
+        ? {
+            acceptAllDevices: true,
+            optionalServices: ['heart_rate', 'battery_service', 'fitness_machine', 0x180d, 0x180f, 0x1826]
+          }
+        : {
+            filters: [{ services: ['heart_rate'] }, { services: [0x180d] }],
+            optionalServices: ['battery_service', 'fitness_machine', 0x180d, 0x180f, 0x1826]
+          };
+
+      let device: any = null;
+      try {
+        device = await (navigator as any).bluetooth.requestDevice(requestOptions);
+      } catch (firstErr: any) {
+        // If filters failed because no device advertised 0x180d in scan payload, and if error was NOT user cancellation/gesture
+        if (!acceptAllDevicesFallback && firstErr?.name !== 'NotFoundError' && !firstErr?.message?.includes('cancelled')) {
+          console.log('[BLE] Filtered scan returned error, falling back to acceptAllDevices options directly if user re-scans.');
+        }
+        throw firstErr;
+      }
+      console.log('[BLE] Device selected:', device?.name || 'Unnamed Bluetooth Device');
 
       if (!device || !device.gatt) {
         this.currentStatus = 'disconnected';
         this.notifyBiometricsSubscribers();
+        console.warn('[BLE] Request device returned no valid GATT interface.');
         return { success: false, error: 'No Bluetooth device was selected.' };
       }
 
@@ -316,42 +337,57 @@ class WearableSyncService {
 
       // Handle disconnection event
       device.addEventListener('gattserverdisconnected', () => {
-        console.log('[WearableSyncService] Bluetooth device disconnected:', device.name);
+        console.log('[BLE] Bluetooth device disconnected:', device.name || 'GATT Device');
         this.currentStatus = 'disconnected';
         this.gattServer = null;
         this.hrCharacteristic = null;
         this.notifyBiometricsSubscribers();
       });
 
-      console.log(`[WearableSyncService] Connecting GATT server to BLE device: ${device.name || 'HR Device'}...`);
+      console.log(`[BLE] Step 2: Connecting GATT server to device: ${device.name || 'HR Device'}...`);
       const server = await device.gatt.connect();
       this.gattServer = server;
+      console.log('[BLE] GATT Server connected successfully.');
 
-      // Primary Heart Rate Service
+      // Step 3: Get Primary Service (heart_rate / 0x180D)
+      console.log('[BLE] Step 3: Getting Primary Service (heart_rate / 0x180D)...');
       let hrService: any = null;
       try {
         hrService = await server.getPrimaryService('heart_rate');
+        console.log('[BLE] Primary Service "heart_rate" retrieved.');
       } catch (e) {
         try {
           hrService = await server.getPrimaryService(0x180d);
+          console.log('[BLE] Primary Service 0x180D retrieved.');
         } catch (e2) {
-          console.warn('[WearableSyncService] Device connected but no primary heart_rate service found.');
+          console.warn('[BLE] Device connected but primary heart_rate service (0x180D) was not found.');
         }
       }
 
+      // Step 4: Get Characteristic & Enable Live Data Stream
       if (hrService) {
         try {
-          const characteristic = await hrService.getCharacteristic('heart_rate_measurement');
+          console.log('[BLE] Step 4: Getting Characteristic (heart_rate_measurement / 0x2A37)...');
+          let characteristic: any = null;
+          try {
+            characteristic = await hrService.getCharacteristic('heart_rate_measurement');
+          } catch (charErr1) {
+            characteristic = await hrService.getCharacteristic(0x2a37);
+          }
           this.hrCharacteristic = characteristic;
+          console.log('[BLE] Characteristic "heart_rate_measurement" (0x2A37) retrieved.');
 
+          console.log('[BLE] Step 5: Enabling live GATT notifications with startNotifications()...');
           await characteristic.startNotifications();
-          console.log('[WearableSyncService] Subscribed to Heart Rate GATT notifications (0x2A37).');
+          console.log('[BLE] Successfully subscribed to Heart Rate GATT notifications (0x2A37).');
 
           characteristic.addEventListener('characteristicvaluechanged', (event: Event) => {
             const target = event.target as any;
             if (target && target.value) {
-              const hr = this.parseHeartRateGatt(target.value);
+              const dataView = target.value as DataView;
+              const hr = this.parseHeartRateGatt(dataView);
               if (hr > 0) {
+                console.log(`[BLE] Live Heart Rate update received: ${hr} BPM`);
                 this.updateBiometrics({ heartRate: hr });
                 this.notifyListeners({
                   deviceName: device.name || 'Bluetooth HR Device',
@@ -363,19 +399,20 @@ class WearableSyncService {
             }
           });
         } catch (charErr) {
-          console.warn('[WearableSyncService] Could not subscribe to heart_rate_measurement characteristic:', charErr);
+          console.warn('[BLE] Could not subscribe to heart_rate_measurement characteristic:', charErr);
         }
       }
 
-      // Read Battery Service optional
+      // Read Battery Service (Optional)
       try {
+        console.log('[BLE] Checking optional Battery Service...');
         const batteryService = await server.getPrimaryService('battery_service');
         const batteryChar = await batteryService.getCharacteristic('battery_level');
         const batteryVal = await batteryChar.readValue();
         const battLevel = batteryVal.getUint8(0);
-        console.log(`[WearableSyncService] Device battery level: ${battLevel}%`);
+        console.log(`[BLE] Device battery level: ${battLevel}%`);
       } catch (battErr) {
-        // Battery service optional
+        // Battery service is optional
       }
 
       if (this.isSimulating) {
@@ -406,15 +443,17 @@ class WearableSyncService {
       };
 
     } catch (err: any) {
-      console.error('[WearableSyncService] Web Bluetooth connection failed:', err);
+      console.error('[BLE] Web Bluetooth connection failed:', err);
       this.currentStatus = 'disconnected';
       this.notifyBiometricsSubscribers();
 
       let errorMsg = err.message || 'Bluetooth connection failed.';
-      if (err.name === 'SecurityError' || (err.message && (err.message.includes('permissions policy') || err.message.includes('disallowed')))) {
-        errorMsg = 'Web Bluetooth is restricted inside preview iframes by browser security policy. Please click "Open in New Tab" to scan and connect real Bluetooth hardware in a full window, or use "Simulated Watch Mode" below.';
-      } else if (err.name === 'NotFoundError') {
-        errorMsg = 'Device pairing cancelled or no Bluetooth device was selected.';
+      if (err.name === 'SecurityError' || (err.message && (err.message.includes('permissions policy') || err.message.includes('disallowed') || err.message.includes('iframe')))) {
+        errorMsg = 'Web Bluetooth is restricted inside preview iframes by browser security policy. Please click "Open App in New Tab" to scan and connect real Bluetooth hardware, or enable Simulated Watch Mode.';
+      } else if (err.message && err.message.includes('user gesture')) {
+        errorMsg = 'Web Bluetooth requires an immediate user gesture. Please click "Scan for Heart Rate Devices" directly or open the app in a new tab.';
+      } else if (err.name === 'NotFoundError' || (err.message && err.message.includes('cancelled'))) {
+        errorMsg = 'Device pairing was cancelled or no Bluetooth device was selected.';
       }
 
       return {
@@ -428,11 +467,13 @@ class WearableSyncService {
     if (this.hrCharacteristic) {
       try {
         await this.hrCharacteristic.stopNotifications();
+        console.log('[BLE] Stopped GATT notifications.');
       } catch (e) {}
       this.hrCharacteristic = null;
     }
     if (this.gattServer && this.gattServer.connected) {
       this.gattServer.disconnect();
+      console.log('[BLE] Disconnected GATT server.');
       this.gattServer = null;
     }
     if (this.connectedBluetoothDevice) {
@@ -443,13 +484,17 @@ class WearableSyncService {
   }
 
   private parseHeartRateGatt(dataView: DataView): number {
+    if (!dataView || dataView.byteLength < 2) return 0;
     const flags = dataView.getUint8(0);
     const rate16Bits = (flags & 0x01) !== 0;
-    if (rate16Bits) {
-      return dataView.getUint16(1, true);
+    let heartRate = 0;
+    if (rate16Bits && dataView.byteLength >= 3) {
+      heartRate = dataView.getUint16(1, true); // Little Endian 16-bit
     } else {
-      return dataView.getUint8(1);
+      heartRate = dataView.getUint8(1); // 8-bit
     }
+    console.log(`[BLE] Parsed DataView: ${heartRate} BPM (Format: ${rate16Bits ? '16-bit' : '8-bit'}, Flags: 0x${flags.toString(16)})`);
+    return heartRate;
   }
 
   public updateBiometrics(data: Partial<WearableBiometrics>) {
